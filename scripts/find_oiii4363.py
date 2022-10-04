@@ -100,8 +100,8 @@ def check_for_emission ( obj, dropbox_directory='/Users/kadofong/DropBox/SAGA/',
         u_arr[idx] = u_ew
     return arr, u_arr
 
-def main_fitline ():
-    clean = build_saga_catalog ()
+def main_fitline (*args, **kwargs):
+    clean = build_saga_catalog (*args, **kwargs)
     all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
     
     for objname in all_the_good_spectra['wordid']:
