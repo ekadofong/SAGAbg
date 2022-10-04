@@ -11,18 +11,24 @@ from SAGAbg import SAGA_get_spectra
 
 # \\ mock NB parameters
 line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4861., }
+
 keys = ['OIII4363','Hbeta','Halpha']
 labels = [r'[OIII]$\lambda$4363$\rm \AA$', r'H$\beta$', r'H$\alpha$']
-def fit_line ( subspec, line_wl ):
+def fit_line ( subspec, line_wl, fit_continuum=False ):
     # Fit the spectrum and calculate the fitted flux values (``y_fit``)
     g_init = models.Gaussian1D(amplitude=subspec.flux.max(), mean=line_wl, stddev=1.*u.AA)
-    c_init = models.Const1D ( amplitude = np.median(subspec.flux) )
-    compound_init = g_init + c_init
-    g_fit = fit_lines(subspec, compound_init)
+    
+    c_init = models.Const1D ( amplitude = np.nanmedian(subspec.flux) )
+    model_init = g_init + c_init
+    if not fit_continuum:
+        model_init.amplitude_1.fixed = True
+        
+    g_fit = fit_lines(subspec, model_init)
     #y_fit = g_fit(subspec.spectral_axis)
 
     line_flux = g_fit.amplitude_0 * np.sqrt(2.*np.pi) * g_fit.stddev_0
     continuum_specflux = g_fit.amplitude_1  
+
     return g_fit, (line_flux.value, continuum_specflux.value)  
 
 def define_subregion (spec, line_wl, subspec_window = 70.*u.AA  ):
@@ -51,7 +57,7 @@ def singleton (obj, dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
         if subspec.flux.size == 0:
             arr[key_index] = np.NaN
             continue
-        
+
         lfit, fluxes = fit_line ( subspec, line_wavelengths[key]*u.AA )
         arr[key_index,:2] = fluxes
         arr[key_index,2] = lfit.amplitude_0.value
@@ -63,8 +69,9 @@ def singleton (obj, dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
         ax = axarr[key_index]
         xs = subspec.spectral_axis
         ax.plot ( xs, subspec.flux, color='k' )
-        ax.axhline ( lfit.amplitude_1.value, color='tab:blue', lw=3)        
-        ax.axhspan ( *np.quantile(subspec.flux.value, [0.84,.16]), color='#e0e0e0',zorder=0 )
+        ax.axhline ( lfit.amplitude_1.value, color='tab:blue', lw=3)     
+        ax.axhline ( np.nanquantile(subspec.flux.value, .5), color='grey')
+        ax.axhspan ( *np.nanquantile(subspec.flux.value, [0.84,.16]), color='#e0e0e0',zorder=0 )
         ax.plot ( xs, lfit(xs), color='r' )
         ax.set_ylabel(r'$\rm F_\lambda$ (counts)')
         
