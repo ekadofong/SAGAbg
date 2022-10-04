@@ -114,6 +114,23 @@ def main_fitline (dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
         np.savetxt ( arrpath, linefit_info )
         plt.close ()
 
+def estimate_detections (intermediate_directory):
+    import glob
+
+    slist = np.array(glob.glob(intermediate_directory))
+    #indices = np.array([ os.path.basename(x).split('.')[0].split('fit_')[1] for x in slist])
+
+    linebloc = np.zeros([len(slist), 3, 7])
+    for findex, filename in enumerate(slist):
+        arr = np.genfromtxt(filename)
+        linebloc[findex] = arr
+
+    ew = linebloc[:,:,0] / linebloc[:,:,1]
+    snr = linebloc[:,:,2] / linebloc[:,:,6]
+
+    realdet = (snr[:,0]>1.)&(linebloc[:,0,4]>2.)&(ew[:,0]>0.)    
+    return realdet, linebloc, (ew,snr)
+
 def main_fakeNB (line_df=None):
     clean = build_saga_catalog ()
     all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
