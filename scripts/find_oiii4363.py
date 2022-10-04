@@ -1,24 +1,14 @@
+#from turtle import width
+import os
 import numpy as np
-#import os
+import matplotlib.pyplot as plt
 import pandas as pd
-#from astropy.io import ascii
-#from astropy import table
-
 from astropy import cosmology
-#from astropy.table import Table
-#from astropy.io import fits
-#import matplotlib.pyplot as plt
-
 import SAGA  
-#from SAGA import ObjectCuts as C
-
-#from easyquery import QueryMaker
-#from easyquery import Query
-#from SAGA.database import FitsTable 
-
 from SAGAbg.utils import calc_kcor
 from SAGAbg import SAGA_get_spectra
-#import namer
+import fit_lines
+
 
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
@@ -70,36 +60,87 @@ def estimate_stellarmass (clean):
     clean['cm_logmstar'] = logml + (clean['Mg']-5.11)/-2.5    
     return clean
     
-def measure_fake_NBflux ( wavelength, flux, ivar, line_wl, width=10.):
-    in_transmission = abs(wavelength-line_wl) <= width
-    line_flux = np.trapz(flux[in_transmission], wavelength[in_transmission])
-    e_flux = np.sqrt(np.trapz(ivar[in_transmission], wavelength[in_transmission]))
+def measure_fake_NBflux ( wavelength, flux, ivar, line_wl, width=10., continuum=0.):
+    in_transmission = abs(wavelength-line_wl) <= (width/2.)
+    if in_transmission.sum() == 0:
+        return np.NaN, np.NaN
+    centers = wavelength[in_transmission]
+    bin_widths = np.diff(centers)
+    bin_widths = np.insert (bin_widths, len(bin_widths), bin_widths[-1])
+    line_flux = np.sum ( (flux[in_transmission] - continuum)*bin_widths )
+    e_flux = np.sqrt(np.sum ( ivar[in_transmission]*bin_widths ))
+    #line_flux = np.trapz(flux[in_transmission], wavelength[in_transmission])
+    #e_flux = np.sqrt(np.trapz(ivar[in_transmission], wavelength[in_transmission]))
+    #width = np.trapz(np.ones_like(wavelength[in_transmission]), wavelength[in_transmission])
+    width = np.sum(bin_widths)
     return line_flux, e_flux
 
-def check_for_emission ( obj, dropbox_directory='/Users/kadofong/DropBox/SAGA/' ):
+def check_for_emission ( obj, dropbox_directory='/Users/kadofong/DropBox/SAGA/', width=10. ):
     flux, wave, ivar, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_directory)
-
+    
     restwv = wave/(1.+obj['SPEC_Z'])
     arr = np.zeros(len(line_wavelengths))
+    u_arr = np.zeros_like(arr)
     for idx,key in enumerate(line_wavelengths.keys()):
-        nbflux,e_lineflux = measure_fake_NBflux ( restwv, flux, ivar, line_wavelengths[key] )
-        contflux, e_contflux = measure_fake_NBflux ( restwv, flux, ivar, cont_wavelengths[key] )
-        excess = (nbflux - contflux)/np.sqrt(e_lineflux**2 + e_contflux**2)
-        arr[idx] = excess    
-    return arr
+        #contflux, e_contflux, width = measure_fake_NBflux ( restwv, flux, ivar, cont_wavelengths[key] )
+        
+        continuum_window = abs(restwv - cont_wavelengths[key]) <= (width/2.)
+        mc = np.mean(flux[continuum_window])
+        e_mc = np.std(flux[continuum_window])
+        nbflux,e_lineflux = measure_fake_NBflux ( restwv, flux, ivar, line_wavelengths[key], continuum=mc, width=width )        
+        #excess = (nbflux - contflux)/np.sqrt(e_lineflux**2 + e_contflux**2)
+        u_nbflux = np.sqrt(e_lineflux**2 + e_mc**2)
+        
+        ew = nbflux / mc
+        u_ew = np.sqrt(u_nbflux**2 + ew**2 * e_mc**2 )/mc
+        
+        #print(nbflux, u_nbflux, nbflux/u_nbflux)
+        #print(ew, u_ew, ew/u_ew)
+        arr[idx] = ew #excess    
+        u_arr[idx] = u_ew
+    return arr, u_arr
 
-def main ():
+def main_fitline ():
     clean = build_saga_catalog ()
     all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
-    line_df = pd.DataFrame ( index=all_the_good_spectra['wordid'], columns=line_wavelengths.keys() )
-    for objname in line_df.index:
+    
+    for objname in all_the_good_spectra['wordid']:
+        arrpath = f'../local_data/line_fits/fit_{objname}.txt'
+        if os.path.exists(arrpath):
+            continue
+
+        obj = all_the_good_spectra.loc[objname]
+        linefit_info = fit_lines.singleton ( obj )
+        np.savetxt ( arrpath, linefit_info )
+        plt.close ()
+
+def main_fakeNB (line_df=None):
+    clean = build_saga_catalog ()
+    all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
+    if line_df is None:
+        colnames = []
+        for key in line_wavelengths.keys():
+            colnames.extend ( [key, f'u_{key}'])
+        line_df = pd.DataFrame ( index=all_the_good_spectra['wordid'], columns=colnames )
+    
+    for obj_index,objname in enumerate(line_df.index):
+        if np.isfinite(line_df.iloc[obj_index]['Halpha']):
+            continue
         try:
-            line_df.loc[objname] = check_for_emission ( all_the_good_spectra.loc[objname] )
+            ew, u_ew = check_for_emission ( all_the_good_spectra.loc[objname] )
+            for idx,key in enumerate(line_wavelengths.keys()):
+                line_df.loc[objname, key] = ew[idx]
+                line_df.loc[objname, f'u_{key}'] = u_ew[idx]
+            #print(objname)
         except Exception as e:
             print (e)
             continue
+        if obj_index % 100 == 0:            
+            line_df.to_csv ( '../local_data/scratch/line_df.csv' )
+    line_df.to_csv('../local_data/scratch/line_df.csv')
     return line_df
 
 if __name__ == '__main__':
-    line_df = main ()
-    line_df.to_csv('../local_data/scratch/line_df.csv')
+    #line_df = main ()
+    #line_df.to_csv('../local_data/scratch/line_df.csv')
+    main_fitline ()
