@@ -100,8 +100,8 @@ def check_for_emission ( obj, dropbox_directory='/Users/kadofong/DropBox/SAGA/',
         u_arr[idx] = u_ew
     return arr, u_arr
 
-def main_fitline (*args, **kwargs):
-    clean = build_saga_catalog (*args, **kwargs)
+def main_fitline (dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
+    clean = build_saga_catalog (dropbox_directory = dropbox_directory)
     all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
     
     for objname in all_the_good_spectra['wordid']:
@@ -110,7 +110,7 @@ def main_fitline (*args, **kwargs):
             continue
 
         obj = all_the_good_spectra.loc[objname]
-        linefit_info = fit_lines.singleton ( obj )
+        linefit_info = fit_lines.singleton ( obj, dropbox_directory=dropbox_directory )
         np.savetxt ( arrpath, linefit_info )
         plt.close ()
 
