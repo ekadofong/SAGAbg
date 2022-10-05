@@ -106,11 +106,17 @@ def main_fitline (dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
     
     for objname in all_the_good_spectra['wordid']:
         arrpath = f'../local_data/line_fits/fit_{objname}.txt'
-        if os.path.exists(arrpath):
+        if os.path.exists(arrpath):            
             continue
 
         obj = all_the_good_spectra.loc[objname]
-        linefit_info = fit_lines.singleton ( obj, dropbox_directory=dropbox_directory )
+        try:
+            linefit_info = fit_lines.singleton ( obj, dropbox_directory=dropbox_directory )
+        except Exception as e:
+            with open('./line_fit.log','a') as f:
+                print(f'[{objname}] {e}', file=f)
+            continue
+
         np.savetxt ( arrpath, linefit_info )
         plt.close ()
 
