@@ -10,7 +10,7 @@ from astropy.nddata import StdDevUncertainty
 from SAGAbg import SAGA_get_spectra
 
 # \\ mock NB parameters
-line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4861., }
+line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4861.,'Hgamma':4342. }
 
 keys = ['OIII4363','Hbeta','Halpha']
 labels = [r'[OIII]$\lambda$4363$\rm \AA$', r'H$\beta$', r'H$\alpha$']
@@ -38,13 +38,16 @@ def define_subregion (spec, line_wl, subspec_window = 70.*u.AA  ):
 
 def singleton (obj, dropbox_directory = '/Users/kadofong/DropBox/SAGA/'):
     flux, wave, ivar, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_directory)
+    
     isfinite = np.isfinite(flux)
     flux = flux[isfinite]
     wave = wave[isfinite]
+    ivar = ivar[isfinite]
     
-    uncertainty = StdDevUncertainty ( np.sqrt(flux) )
+    uncertainty = StdDevUncertainty ( np.sqrt ( ivar + flux ) )
     spec = specutils.Spectrum1D ( flux=flux*u.count, spectral_axis=wave/(1.+obj['SPEC_Z'])*u.AA, 
-                                uncertainty=uncertainty )    
+                                uncertainty=uncertainty )   
+    return spec
     
     # \\ set up table
     arr = np.zeros([len(keys),7])

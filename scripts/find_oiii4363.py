@@ -13,8 +13,8 @@ import fit_lines
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
 # \\ mock NB parameters
-line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4861., }
-cont_wavelengths = {'Halpha':6650., 'OIII4363':4400., 'Hbeta':4880.,}
+line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4862., 'Hgamma':4341., 'NII6548':6548., 'NII6583':6583.  }
+cont_wavelengths = {'Halpha':6600., 'OIII4363':4420., 'Hbeta':4880., 'Hgamma':4300.}
 
 def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users/kadofong/DropBox/SAGA/',
                           name_file='../local_data/naming/names.txt'):
@@ -67,13 +67,13 @@ def measure_fake_NBflux ( wavelength, flux, ivar, line_wl, width=10., continuum=
     centers = wavelength[in_transmission]
     bin_widths = np.diff(centers)
     bin_widths = np.insert (bin_widths, len(bin_widths), bin_widths[-1])
-    line_flux = np.sum ( (flux[in_transmission] - continuum)*bin_widths )
-    e_flux = np.sqrt(np.sum ( ivar[in_transmission]*bin_widths ))
+    flux = np.sum ( (flux[in_transmission] - continuum)*bin_widths )
+    e_flux = np.sqrt(np.sum ( ivar[in_transmission]*bin_widths**2 ))
     #line_flux = np.trapz(flux[in_transmission], wavelength[in_transmission])
     #e_flux = np.sqrt(np.trapz(ivar[in_transmission], wavelength[in_transmission]))
     #width = np.trapz(np.ones_like(wavelength[in_transmission]), wavelength[in_transmission])
     width = np.sum(bin_widths)
-    return line_flux, e_flux
+    return flux, e_flux
 
 def check_for_emission ( obj, dropbox_directory='/Users/kadofong/DropBox/SAGA/', width=10. ):
     flux, wave, ivar, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_directory)
