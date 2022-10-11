@@ -148,6 +148,7 @@ def main (dbdir, savedir, verbose=True):
             np.savetxt ( f'{objdir}/{wordid}_lineparams.dat', model_fit.parameters  )
             np.savetxt ( f'{objdir}/{wordid}_lineparamsNOABSORPTION.dat', model_fit_noabs.parameters  )
             plt.savefig( f'{objdir}/{wordid}.png')
+            plt.close()
             if verbose:
                 print(f'[main] Saved to {objdir}', file=f)
             ncompleted +=1 
@@ -155,6 +156,4 @@ def main (dbdir, savedir, verbose=True):
                 break
         print(f'N_completed = {ncompleted}', file=f)
         print(f'N_failed = {nfailed} [{nfailed/(ncompleted+nfailed):.2f}]', file=f)
-    
-        
     
