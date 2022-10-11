@@ -57,7 +57,7 @@ def visualize (restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom,
         ax.add_patch ( rectangle )
       
     
-def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):        
+def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig='if_detect'):        
     windowwidth = line_fitting._DEFAULT_WINDOW_WIDTH
     linewidth = line_fitting._DEFAULT_LINE_WIDTH
     
@@ -117,7 +117,8 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
     
     if isinstance(savefig, str):
         if savefig == 'if_detect':
-            if line_fluxes[0,1]/line_fluxes[1,1] > 1.:
+            random_trip = np.random.uniform ( 0., 1. ) > .9
+            if (line_fluxes[0,1]/line_fluxes[1,1] > 1.) or random_trip:
                 visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
     elif savefig:
         visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
