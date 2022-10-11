@@ -124,8 +124,8 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
     return line_fluxes, model_fit, model_fit_noabs
     
 
-def main (dbdir, savedir, verbose=True):
-    clean = catalogs.build_saga_catalog ()
+def main (dbdir, savedir, verbose=True, nrun=None):
+    clean = catalogs.build_saga_catalog (dropbox_directory=dbdir)
     first_objects = clean[(clean['selection']==3)&(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
     
     #all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]    
@@ -152,8 +152,9 @@ def main (dbdir, savedir, verbose=True):
             if verbose:
                 print(f'[main] Saved to {objdir}', file=f)
             ncompleted +=1 
-            if (ncompleted+nfailed) > 2:
-                break
+            if nrun is not None:
+                if (ncompleted+nfailed) > nrun:
+                    break
         print(f'N_completed = {ncompleted}', file=f)
         print(f'N_failed = {nfailed} [{nfailed/(ncompleted+nfailed):.2f}]', file=f)
     
