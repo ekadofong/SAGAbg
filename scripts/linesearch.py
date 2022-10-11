@@ -2,6 +2,7 @@ import os
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import patches
 from astropy.modeling import fitting
 
 from SAGAbg import SAGA_get_spectra, line_fitting
@@ -22,7 +23,7 @@ def define_objects ():
     #all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
     return first_objects
 
-def visualize (restwave, flux, line_fluxes, model_fit, frandom, windowwidth, linewidth):
+def visualize (restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth):
     fig, axarr = plt.subplots(3,1,figsize=(10,6))
 
     for ax_index,key in enumerate(['Hgamma','Hbeta','Halpha']):
@@ -33,21 +34,27 @@ def visualize (restwave, flux, line_fluxes, model_fit, frandom, windowwidth, lin
         ax.scatter ( restwave[in_transmission], frandom[in_transmission], edgecolor='lightgrey', facecolor='None')
         ax.scatter ( restwave[in_transmission], flux[in_transmission],color='grey')
         xlim = ax.get_xlim()
-        ax.plot ( xs, model_fit(xs), color='r', lw=2)
+        ax.plot ( xs, model_fit(xs), color='r', ls='--', lw=2)
+        ax.plot ( xs, model_fit_noabs(xs), color='r', lw=2)
+        
 
         for wv in line_wavelengths.values():
             ax.axvline(wv, color='r', ls=':')
             ax.axvspan(wv-linewidth/2.,wv+linewidth/2., color='r',alpha=0.05)
         ax.set_xlim(xlim)  
     
-    axarr[0].text ( 0.025, 0.95, r'$\rm F_{H\gamma}$: %.2f [$\pm$%.2f]' % (line_fluxes[0,0], line_fluxes[1,0]),
+    axarr[0].text ( 0.025, 0.95, r'$\rm F_{H\gamma}$: %.2f (%.2f) [$\pm$%.2f]' % (line_fluxes[0,0], line_fluxes[1,0], line_fluxes[2,0]),
                    transform=axarr[0].transAxes, ha='left', va='top', color='r' )
-    axarr[0].text ( 0.025, 0.8, r'$\rm F_{[OIII]\lambda 4363}$: %.2f [$\pm$%.2f]' % (line_fluxes[0,1], line_fluxes[1,1]),
+    axarr[0].text ( 0.025, 0.8, r'$\rm F_{[OIII]\lambda 4363}$: %.2f (%.2f) [$\pm$%.2f]' % (line_fluxes[0,1], line_fluxes[1,1], line_fluxes[2,1]),
                    transform=axarr[0].transAxes, ha='left', va='top', color='r' )   
-    axarr[1].text ( 0.025, 0.95, r'$\rm F_{H\beta}$: %.2f [$\pm$%.2f]' % (line_fluxes[0,2], line_fluxes[1,2]),
+    axarr[1].text ( 0.025, 0.95, r'$\rm F_{H\beta}$: %.2f (%.2f) [$\pm$%.2f]' % (line_fluxes[0,2], line_fluxes[1,2], line_fluxes[2,2]),
                    transform=axarr[1].transAxes, ha='left', va='top', color='r' )
-    axarr[2].text ( 0.025, 0.95, r'$\rm F_{H\alpha}$: %.2f [$\pm$%.2f]' % (line_fluxes[0,3], line_fluxes[1,3]),
-                   transform=axarr[2].transAxes, ha='left', va='top', color='r' )         
+    axarr[2].text ( 0.025, 0.95, r'$\rm F_{H\alpha}$: %.2f (%.2f) [$\pm$%.2f]' % (line_fluxes[0,3], line_fluxes[1,3], line_fluxes[2,3]),
+                   transform=axarr[2].transAxes, ha='left', va='top', color='r' )    
+    
+    for ax in axarr:
+        rectangle = patches.Rectangle ( (0.022, 0.65), 0.35, 0.35, facecolor='w', alpha=0.65, transform=ax.transAxes )     
+        ax.add_patch ( rectangle )
       
     
 def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):        
@@ -66,6 +73,7 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
     this_model_noabs = line_fitting.build_linemodel ( restwave, flux, False )
     fitter = fitting.LevMarLSQFitter ()    
     model_fit = fitter ( this_model, restwave[~outside_windows], flux[~outside_windows] )
+    model_fit_noabs = fitter ( this_model_noabs, restwave[~outside_windows], flux[~outside_windows] )
     
     # \\ compute fit fluxes
     halpha_flux = line_fitting.compute_lineflux ( model_fit.amplitude_0, model_fit.stddev_0 )
@@ -73,6 +81,13 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
     hbeta_flux = line_fitting.compute_lineflux ( model_fit.amplitude_6, model_fit.stddev_0 )
     hgamma_flux = line_fitting.compute_lineflux ( model_fit.amplitude_10, model_fit.stddev_0 )
     flux_arr = np.array([hgamma_flux, oiii_flux, hbeta_flux, halpha_flux])    
+    
+    # \\ same, for no absorption model
+    halpha_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_0, model_fit_noabs.stddev_0 )
+    oiii_flux = line_fitting.compute_lineflux   ( model_fit_noabs.amplitude_8, model_fit_noabs.stddev_0 )
+    hbeta_flux = line_fitting.compute_lineflux  ( model_fit_noabs.amplitude_6, model_fit_noabs.stddev_0 )
+    hgamma_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_10,model_fit_noabs.stddev_0 )
+    flux_arr_noabs = np.array([hgamma_flux, oiii_flux, hbeta_flux, halpha_flux])     
     
     # \\ let's also estimate the uncertainty in the line fluxes
     halpha_bloc = line_fitting.get_linewindow ( restwave, line_wavelengths['Halpha'], windowwidth )
@@ -94,7 +109,7 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
         u_flux_arr[pull,2] = line_fitting.compute_lineflux  ( random_fit.amplitude_6, random_fit.stddev_0 ) # Hbeta
         u_flux_arr[pull,0] = line_fitting.compute_lineflux ( random_fit.amplitude_10, random_fit.stddev_0 ) # Hgamma
     
-    line_fluxes = np.array([flux_arr,u_flux_arr.std(axis=0)])
+    line_fluxes = np.array([flux_arr_noabs,flux_arr, u_flux_arr.std(axis=0)])
     elapsed = time.time() - start
     
     if verbose:
@@ -103,10 +118,10 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig=True):
     if isinstance(savefig, str):
         if savefig == 'if_detect':
             if line_fluxes[0,1]/line_fluxes[1,1] > 1.:
-                visualize ( restwave, flux, line_fluxes, model_fit, frandom, windowwidth, linewidth )
+                visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
     elif savefig:
-        visualize ( restwave, flux, line_fluxes, model_fit, frandom, windowwidth, linewidth )
-    return line_fluxes, model_fit, u_flux_arr
+        visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
+    return line_fluxes, model_fit, model_fit_noabs
     
 
 def main (dbdir, savedir, verbose=True):
@@ -120,7 +135,7 @@ def main (dbdir, savedir, verbose=True):
         for wordid in first_objects['wordid']:
             obj = clean.loc[wordid]
             try:
-                line_fluxes, model_fit = singleton ( obj, dropbox_directory=dbdir, verbose=verbose )
+                line_fluxes, model_fit, model_fit_noabs = singleton ( obj, dropbox_directory=dbdir, verbose=verbose )
             except Exception as e:
                 print(f'[{wordid}] {e}', file=f)
                 nfailed += 1
@@ -131,12 +146,13 @@ def main (dbdir, savedir, verbose=True):
                 os.makedirs ( objdir )
             np.savetxt ( f'{objdir}/{wordid}_fluxes.dat', line_fluxes  )
             np.savetxt ( f'{objdir}/{wordid}_lineparams.dat', model_fit.parameters  )
+            np.savetxt ( f'{objdir}/{wordid}_lineparamsNOABSORPTION.dat', model_fit_noabs.parameters  )
             plt.savefig( f'{objdir}/{wordid}.png')
             if verbose:
                 print(f'[main] Saved to {objdir}', file=f)
             ncompleted +=1 
-            #if ncompleted > 2:
-            #    break
+            if (ncompleted+nfailed) > 2:
+                break
         print(f'N_completed = {ncompleted}', file=f)
         print(f'N_failed = {nfailed} [{nfailed/(ncompleted+nfailed):.2f}]', file=f)
     
