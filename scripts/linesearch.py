@@ -118,23 +118,35 @@ def singleton (obj, dropbox_directory, npull = 100, verbose=True, savefig='if_de
     if isinstance(savefig, str):
         if savefig == 'if_detect':
             random_trip = np.random.uniform ( 0., 1. ) > .9
-            if (line_fluxes[0,1]/line_fluxes[1,1] > 1.) or random_trip:
+            if (line_fluxes[0,1]/line_fluxes[2,1] > 1.) or random_trip:
                 visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
     elif savefig:
         visualize ( restwave, flux, line_fluxes, model_fit, model_fit_noabs, frandom, windowwidth, linewidth )
     return line_fluxes, model_fit, model_fit_noabs
     
 
-def main (dbdir, savedir, verbose=True, nrun=None):
+def main (dbdir, savedir, verbose=True, nrun=None, clobber=False):
     clean = catalogs.build_saga_catalog (dropbox_directory=dbdir)
-    first_objects = clean[(clean['selection']==3)&(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]
+    #first_objects = clean[(clean['selection']==3)&(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]    
+    all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]    
+    low_mass = all_the_good_spectra[all_the_good_spectra['cm_logmstar']<9.]
     
-    #all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]    
     ncompleted = 0
     nfailed = 0
     with open(f'{savedir}/run.log', 'w') as f:
-        for wordid in first_objects['wordid']:
+        for wordid in low_mass['wordid']:
             obj = clean.loc[wordid]
+            
+            # \\ check for rerun
+            objdir = f'{savedir}/{wordid}/'
+            if clobber:
+                pass
+            elif os.path.exists(f'{objdir}/{wordid}_fluxes.dat'):
+                if verbose:
+                    print(f'[main] {wordid} already run. Skipping...', file=f)
+                continue
+
+            
             try:
                 line_fluxes, model_fit, model_fit_noabs = singleton ( obj, dropbox_directory=dbdir, verbose=verbose )
             except Exception as e:
@@ -142,7 +154,7 @@ def main (dbdir, savedir, verbose=True, nrun=None):
                 nfailed += 1
                 continue
             
-            objdir = f'{savedir}/{wordid}/'
+            
             if not os.path.exists ( objdir ):
                 os.makedirs ( objdir )
             np.savetxt ( f'{objdir}/{wordid}_fluxes.dat', line_fluxes  )
