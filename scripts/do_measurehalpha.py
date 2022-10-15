@@ -69,7 +69,7 @@ def dowork ( obj, tdict, dropbox_dir, savefig=False ):
 def main (dropbox_dir, savedir, verbose=True, clobber=False, nrun=None):
     if nrun is None:
         nrun = np.inf
-    clean = catalogs.build_saga_catalog ().to_pandas ()
+    clean = catalogs.build_saga_catalog (dropbox_directory=dropbox_dir).to_pandas ()
     low_mass = clean.query('cm_logmstar<9.')
     tdict = logistics.load_filters ()
     
