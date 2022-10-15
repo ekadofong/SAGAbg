@@ -19,7 +19,7 @@ def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users
     base = saga.object_catalog.load_combined_base_catalog()
     base['wordid'] = names[:,1]
     #base = saga.host_catalog.construct_host_query("paper3").filter(base)
-
+    
     cleaner = (base['REMOVE']==0)&base['is_galaxy']&(base['g_mag']<30.)&(base['r_mag']<30.)#&(base['ZQUALITY']>=3)
     clean = base[cleaner].copy()
 
@@ -39,16 +39,16 @@ def estimate_stellarmass (clean, distmod=None):
         distmod = cosmo.distmod ( clean['SPEC_Z'] ).value    
         
     real_kcorrect_g = kcorrect ( 'g', clean['SPEC_Z'],'gr', clean['gr'])
-    clean['Mg'] = clean['g_mag'] - distmod - real_kcorrect_g 
+    clean['oc_Mg'] = clean['g_mag'] - distmod - real_kcorrect_g 
     clean["Kg"] = real_kcorrect_g
     real_kcorrect_r = kcorrect ( 'r', clean['SPEC_Z'], 'gr', clean['gr'])
-    clean['Mr'] = clean['r_mag'] - distmod - real_kcorrect_r
+    clean['oc_Mr'] = clean['r_mag'] - distmod - real_kcorrect_r
     clean["Kr"] = real_kcorrect_r
     real_kcorrect_z = kcorrect ( 'z', clean['SPEC_Z'], 'rz', clean['rz'])
-    clean['Mz'] = clean['z_mag'] - distmod - real_kcorrect_z 
+    clean['oc_Mz'] = clean['z_mag'] - distmod - real_kcorrect_z 
     clean["Kz"] = real_kcorrect_z
 
-    logml = 1.65 * (clean['Mg']-clean['Mr']) - 0.66
-    clean['cm_logmstar'] = logml + (clean['Mg']-5.11)/-2.5    
+    logml = 1.65 * (clean['oc_Mg']-clean['oc_Mr']) - 0.66
+    clean['cm_logmstar'] = logml + (clean['oc_Mg']-5.11)/-2.5    
     return clean
     
