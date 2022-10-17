@@ -70,12 +70,14 @@ def main (dropbox_dir, savedir, verbose=True, clobber=False, nrun=None):
     if nrun is None:
         nrun = np.inf
     clean = catalogs.build_saga_catalog (dropbox_directory=dropbox_dir).to_pandas ()
-    low_mass = clean.query('cm_logmstar<9.')
+    #low_mass = clean.query('cm_logmstar<9.')
+    all_the_good_spectra = clean[(clean['ZQUALITY']>=3)&((clean['TELNAME']=='AAT')|(clean['TELNAME']=='MMT'))]    
+    
     tdict = logistics.load_filters ()
     
     completed = 0
     with open(f'{savedir}/run.log', 'w') as f:
-        for wordid in low_mass.index:
+        for wordid in all_the_good_spectra.index:
             # \\ check for rerun
             objdir = f'{savedir}/{wordid}/'
             if clobber:
