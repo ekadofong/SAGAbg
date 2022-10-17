@@ -1,4 +1,21 @@
 import numpy as np
+from SAGAbg import line_fitting, SAGA_get_spectra
+
+AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
+
+def do_fluxcalibrate (obj, tdict, dropbox_dir):
+    flux, wave, _, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
+    finite_mask = np.isfinite(flux)
+    flux = flux[finite_mask]
+    wave = wave[finite_mask]
+
+    _, qfactors = line_fitting.flux_calibrate( wave, flux, obj, tdict )
+    
+    if obj['TELNAME'] == 'AAT':
+        fluxcal = np.where ( wave < AAT_BREAK, flux*qfactors[0], flux*qfactors[1])*1e17
+    else:
+        fluxcal = flux * np.nanmean(qfactors)*1e17    
+    return wave, fluxcal    
 
 def load_filters ( filterset='DECam' ):
     if filterset=='DECam':

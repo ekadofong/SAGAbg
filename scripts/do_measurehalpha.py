@@ -76,7 +76,7 @@ def main (dropbox_dir, savedir, verbose=True, clobber=False, nrun=None):
     tdict = logistics.load_filters ()
     
     completed = 0
-    with open(f'{savedir}/run.log', 'w') as f:
+    with open(f'{savedir}/run.log', 'a') as f:
         for wordid in all_the_good_spectra.index:
             # \\ check for rerun
             objdir = f'{savedir}/{wordid}/'
