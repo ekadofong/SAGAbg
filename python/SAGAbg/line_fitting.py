@@ -8,6 +8,9 @@ line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4862., 'Hgamma':434
 _DEFAULT_WINDOW_WIDTH = 150.
 _DEFAULT_LINE_WIDTH = 14.
 
+c_angpers = co.c.to(u.AA/u.s).value
+gAB_nu = (3631.*u.Jy).to(u.erg/u.s/u.cm**2/u.Hz).value
+
 def get_linewindow ( wave, line_wl, width=None):
     if width is None:
         width = _DEFAULT_LINE_WIDTH
@@ -160,8 +163,6 @@ def ew_uncertainty ( lflux, specflux_c, u_lflux, u_specflux_c):
 
 
 def flux_calibrate ( wave, flux, photometry, transmission_dictionary ):
-    c_angpers = co.c.to(u.AA/u.s).value
-    gAB_nu = (3631.*u.Jy).to(u.erg/u.s/u.cm**2/u.Hz).value
     flux_calibs = np.zeros(2)
     for ix,fname in enumerate('gr'):
         transmission = transmission_dictionary[fname]
@@ -190,3 +191,14 @@ def compute_zeropoint ( wave, transmission ):
     denominator = np.trapz ( gAB_nu * c_angpers / wave**2 * wave * transmission, wave )
     zp = -2.5*np.log10(numerator/denominator)    
     return zp
+
+def get_mag ( wave, flux, transmission ):
+    numerator = np.trapz(flux*wave*np.interp(wave, transmission[:,0], transmission[:,1]), wave) # f_lambda
+    zp = np.trapz ( gAB_nu * c_angpers / transmission[:,0]**2 * transmission[:,0] * transmission[:,1], transmission[:,0] )
+    specmag = -2.5*np.log10(numerator/zp)
+    return specmag
+
+def compute_kcorrect ( wave, flux,z, filter_curve ):
+    m_observed = get_mag ( wave, flux, filter_curve )
+    m_restframe = get_mag ( wave/(1.+z), flux*(1.+z), filter_curve )
+    return m_observed - m_restframe

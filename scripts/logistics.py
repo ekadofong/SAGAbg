@@ -5,6 +5,8 @@ AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
 
 def do_fluxcalibrate (obj, tdict, dropbox_dir):
     flux, wave, _, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
+    if len(flux) == 0:
+        return None, None
     finite_mask = np.isfinite(flux)
     flux = flux[finite_mask]
     wave = wave[finite_mask]
