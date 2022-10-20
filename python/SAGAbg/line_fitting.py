@@ -52,6 +52,40 @@ def define_linemodel ( wave, flux, line_wl, ltype='emission', linewidth=None, wi
         
     return lmodel
 
+def define_absorptionmodel ( wave, flux, line_wl, fwhm_init=10., windowwidth=None ):
+    if windowwidth is None:
+        windowwidth = _DEFAULT_WINDOW_WIDTH
+    
+    cmask = get_linewindow ( wave, line_wl, windowwidth )
+    continuum_init = np.median(flux[cmask])
+    amplitude_init = -1. * continuum_init * 0.25
+    
+    model_init = models.Lorentz1D ( amplitude=amplitude_init, 
+                                    x_0 = line_wl, 
+                                    fwhm = fwhm_init  )
+    model_init.x_0.fixed = True
+    model_init.amplitude.bounds = [-np.infty, 0.]
+    
+    #model_continuum = models.Box1D ( amplitude = continuum_init, x_0=line_wl, width=windowwidth )
+    
+    total_model = model_init #+ model_continuum
+    return total_model
+     
+def define_continuummodel ( wave, flux, line_wl, windowwidth=None ):
+    if windowwidth is None:
+        windowwidth = _DEFAULT_WINDOW_WIDTH
+    
+    #cmask = get_linewindow ( wave, line_wl, windowwidth )
+    #continuum_init = np.median(flux[cmask])
+    
+    model_init = models.Linear1D (slope=0., intercept = 0.)
+    window = models.Box1D ( amplitude = 1., x_0=line_wl, width=windowwidth )
+    window.amplitude.fixed = True
+
+    total_model = model_init * window    
+    return total_model
+
+
 def tie_vdisp ( this_model ):
     return this_model.stddev_0
 
@@ -83,6 +117,40 @@ def define_lineblocs ( wave, z=0., windowwidth=None, linewidth=None ):
     outside_lines &= abs(wave - line_wavelengths['OIII4363']*(1.+z)) > linewidth/2. 
     outside_lines &= abs(wave - line_wavelengths['Hgamma']*(1.+z)) > linewidth/2. 
     return outside_windows, outside_lines
+
+
+def tie_fwhm ( this_model ):
+    return this_model.fwhm_0
+
+def compute_absew ( amplitude, fwhm, fc ):
+    abs_flux = amplitude * fwhm * np.pi # < 0
+    return abs_flux / fc
+
+def build_absorptionmodel ( wave, flux, z=0. ):
+    # 0 Halpha
+    # 2 Hbeta
+    # 4 Hgamma
+    model_haABS = define_absorptionmodel ( wave, flux, line_wavelengths['Halpha']*(1.+z))
+    model_hbABS = define_absorptionmodel ( wave, flux, line_wavelengths['Hbeta'] *(1.+z))
+    model_hgABS = define_absorptionmodel ( wave, flux, line_wavelengths['Hgamma']*(1.+z))
+    
+    this_model = model_haABS + model_hbABS + model_hgABS
+    this_model.fwhm_1.tied = tie_fwhm
+    this_model.fwhm_2.tied = tie_fwhm
+    
+    return this_model
+
+def build_continuummodel ( wave, flux, z=0., windowwidth=None ):
+    # 0 Halpha
+    # 2 Hbeta
+    # 4 Hgamma
+    model_haBOX = define_continuummodel ( wave, flux, line_wavelengths['Halpha']*(1.+z), windowwidth=windowwidth)
+    model_hbBOX = define_continuummodel ( wave, flux, line_wavelengths['Hbeta'] *(1.+z), windowwidth=windowwidth)
+    model_hgBOX = define_continuummodel ( wave, flux, line_wavelengths['Hgamma']*(1.+z), windowwidth=windowwidth)
+    
+    this_model = model_haBOX + model_hbBOX + model_hgBOX
+    
+    return this_model
 
 def build_linemodel ( wave, flux, z=None, include_absorption=True):
     '''
@@ -193,12 +261,20 @@ def compute_zeropoint ( wave, transmission ):
     return zp
 
 def get_mag ( wave, flux, transmission ):
+    '''
+    Compute AB magnitude through filter curve described by [transmission], assuming
+    that the [flux] is in erg/s/cm^2/Angstrom and the [wave] is in Angstrom
+    '''
     numerator = np.trapz(flux*wave*np.interp(wave, transmission[:,0], transmission[:,1]), wave) # f_lambda
     zp = np.trapz ( gAB_nu * c_angpers / transmission[:,0]**2 * transmission[:,0] * transmission[:,1], transmission[:,0] )
     specmag = -2.5*np.log10(numerator/zp)
     return specmag
 
 def compute_kcorrect ( wave, flux,z, filter_curve ):
+    '''
+    Compute the K correction through the filter curve described by [filter_curve],
+    correcting from redshift [z] to z=0.
+    '''
     m_observed = get_mag ( wave, flux, filter_curve )
-    m_restframe = get_mag ( wave/(1.+z), flux*(1.+z), filter_curve )
+    m_restframe = get_mag ( wave/(1.+z), flux*(1.+z), filter_curve )    
     return m_observed - m_restframe
