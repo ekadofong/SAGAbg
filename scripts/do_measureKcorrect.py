@@ -20,10 +20,17 @@ def main (dropbox_dir):
     tdict = logistics.load_filters ()
     
     kcorr_df = pd.DataFrame ( index = clean.index, columns=['K_g','K_r'], dtype=float)
-    for name in all_the_good_spectra.index:
-        obj = clean.loc[name]
-        kcorrections = dowork ( obj, tdict, dropbox_dir )
-        kcorr_df.loc[name] = kcorrections
+    with open ('../local_data/scratch/kcorrections.log', 'a') as f:
+        for name in all_the_good_spectra.index:
+            obj = clean.loc[name]
+            try:
+                kcorrections = dowork ( obj, tdict, dropbox_dir )
+            except Exception as e:
+                print(f'[{name} failure] {e}', file=f)
+                f.flush ()
+                continue
+            
+            kcorr_df.loc[name] = kcorrections
     return kcorr_df
 
 if __name__ == '__main__':

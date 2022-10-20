@@ -24,19 +24,19 @@ def model2luminosity ( ls_output, obj, tdict ):
     Lha_direct = flux2lum(Fha_direct)
     u_Lha_direct = flux2lum(u_Fha_direct) # just F * const, so uncert = u_F * const
     
+    # \\ NOW COMPUTE with EW method
     zp = line_fitting.compute_zeropoint ( tdict['r'][:,0], tdict['r'][:,1] ) 
-    
-    # \\ f = 10^(-0.4*(r - zp)) = 10^x
-    # \\ x = -0.4r + 0.4zp
-    # \\ dx/dr = -0.4
-    # \\ df / dr = df/dx * dx/dr
-    # \\ df/dr = 10^x ln(10) * dx/dr
-    # \\ df/dr = f * ln(10) * -0.4
+    # \ f = 10^(-0.4*(r - zp)) = 10^x
+    # \ x = -0.4r + 0.4zp
+    # \ dx/dr = -0.4
+    # \ df / dr = df/dx * dx/dr
+    # \ df/dr = 10^x ln(10) * dx/dr
+    # \ df/dr = f * ln(10) * -0.4
     bbflux = 10.**((obj['r_mag'] - zp)/-2.5)* u.erg/u.s/u.cm**2/u.AA
     u_bbflux = abs(bbflux * np.log(10.) * -0.4 )*obj['r_err']
-    # \\ FHA(EW) = EW * f_bb
-    # \\ dFHA/dEW = f_bb
-    # \\ dFHA/df_bb = EW
+    # \ FHA(EW) = EW * f_bb
+    # \ dFHA/dEW = f_bb
+    # \ dFHA/df_bb = EW
     ew = halpha_lineflux / continuum_specflux
     Fha_ew = ew * bbflux
     u_continuum_specflux = ls_output[1][2] * 1e-17 * u.erg/u.s/u.cm**2/u.AA
