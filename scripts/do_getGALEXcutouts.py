@@ -5,7 +5,7 @@ from astropy import table
 from astroquery.mast import Observations
 #import ophandler
 #import aux
-import catalogs
+#import catalogs
 
 def load_galexcutouts ( name, datadir, verbose=True, infer_names=False):
     '''
@@ -155,9 +155,4 @@ NUV,{names[1]}''')
     return 0, manifest
 
 
-def main (*args, **kwargs):
-    #agg_df = ophandler.load_globalproperties ( *args, **kwargs )
-    
-    for _,row in source.iterrows():
-        download_singleton ( row )
         
