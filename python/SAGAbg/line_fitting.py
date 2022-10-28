@@ -1,56 +1,141 @@
+from math import dist
 from turtle import window_width
 import numpy as np
 from astropy import constants as co
 from astropy import units as u
-from astropy.modeling import models
+from astropy import modeling 
+from .models import *
+from .line_db import *
+#import models, fitting
 
-line_wavelengths = {'Halpha':6563.,'OIII4363':4363., 'Hbeta':4862., 'Hgamma':4341., 'NII6548':6548., 'NII6583':6583.  }
-_DEFAULT_WINDOW_WIDTH = 150.
-_DEFAULT_LINE_WIDTH = 14.
+models = modeling.models
+fitting = modeling.fitting
 
 c_angpers = co.c.to(u.AA/u.s).value
 gAB_nu = (3631.*u.Jy).to(u.erg/u.s/u.cm**2/u.Hz).value
 
+def tie_vdisp ( this_model ):
+    return this_model.stddev_0
+
+def tie_ew (this_model):
+    return this_model.ew_0
+
+
+def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True ):
+    '''
+    A more generalized line model that includes all of lines described at top.
+    Each line gets its own continuum, so we'll see how the fits go.
+    '''
+    if z is None:
+        z=0.
+    
+    model_list = []
+    parameter_indices = []
+    for linename in line_wavelengths.keys():
+        # \\ sort out continuum
+        if linename not in CONTINUUM_TAGS:
+            add_continuum = True
+        else:
+            add_continuum = False
+            
+        component = define_linemodel ( wave, flux, line_wavelengths[linename], z=z, linewidth=line_width,
+                                             windowwidth=window_width, add_continuum=add_continuum )
+        parameter_indices.append(f'emission{linename}')
+        if add_continuum:
+            paramater_indices.append(f'continuum{linename}')
+            
+        # \\ add Balmer emission where
+        # \\ the EW is held constant
+        if (linename in BALMER_ABSORPTION) and add_absorption:
+            absorption = define_linemodel ( wave, flux, line_wavelengths[linename]*(1.+z), ltype='absorption')
+            paramater_indices.append(f'absorption{linename}')           
+            component = component + absorption 
+        model_list.append(component)
+    model_init = model_list[0]
+    for ix in range(1, len(model_list)):
+        model_init = model_init + model_list[ix]
+        
+    # \\ all linewidths are constrained to be the same
+    for sname in [x for x in model_init.param_names if 'stddev' in x]:
+        if sname == 'stddev_0':
+            continue
+        getattr(model_init, sname).tied = tie_vdisp
+        
+    return model_init, np.asarray(parameter_indices)
+
+def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False ):
+    window_width = _DEFAULT_WINDOW_WIDTH*(1.+z)
+    line_width = _DEFAULT_LINE_WIDTH*(1.+z)
+        
+    # \\ define spectrum
+    this_model = build_linemodel ( wave, flux, z=z, window_width=window_width, line_width=line_width )
+    #pmodel = models.Polynomial1D(2, c0=np.median(flux), c1=0., c2=0. )
+    #this_model = this_model + pmodel 
+    in_line, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
+    
+    fitter = fitting.LevMarLSQFitter ()    
+    model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
+    return model_fit
+    
+    # \\ same, for no absorption model
+    halpha_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_0, model_fit_noabs.stddev_0 )
+    oiii_flux = line_fitting.compute_lineflux   ( model_fit_noabs.amplitude_8, model_fit_noabs.stddev_0 )
+    hbeta_flux = line_fitting.compute_lineflux  ( model_fit_noabs.amplitude_6, model_fit_noabs.stddev_0 )
+    hgamma_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_10,model_fit_noabs.stddev_0 )
+    flux_arr_noabs = np.array([hgamma_flux, oiii_flux, hbeta_flux, halpha_flux])     
+    
+    # \\ let's also estimate the uncertainty in the line fluxes
+    halpha_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Halpha']*(1.+z), windowwidth )
+    hbeta_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Hbeta']*(1.+z), windowwidth )
+    hgamma_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Hgamma']*(1.+z), windowwidth )
+    
+    u_flux_arr = np.zeros([npull, 4])
+    u_fc_arr = np.zeros([npull,3])
+    
+    start = time.time ()
+    for pull in range(npull):
+        # \\ repull from non-line local areas of the spectrum
+        frandom = np.zeros_like(wave)
+        frandom[halpha_bloc] = np.random.choice(flux[halpha_bloc&outside_lines], size=halpha_bloc.sum(), replace=True)
+        frandom[hbeta_bloc] = np.random.choice(flux[hbeta_bloc&outside_lines], size=hbeta_bloc.sum(), replace=True)
+        frandom[hgamma_bloc] = np.random.choice(flux[hgamma_bloc&outside_lines], size=hgamma_bloc.sum(), replace=True)
+        
+        random_fit = fitter ( this_model_noabs, wave[~outside_windows], frandom[~outside_windows] )
+        u_flux_arr[pull,3] = line_fitting.compute_lineflux ( random_fit.amplitude_0, random_fit.stddev_0 ) # Halpha
+        u_flux_arr[pull,1] = line_fitting.compute_lineflux  (  random_fit.amplitude_8, random_fit.stddev_0 ) # OIII
+        u_flux_arr[pull,2] = line_fitting.compute_lineflux  ( random_fit.amplitude_6, random_fit.stddev_0 ) # Hbeta
+        u_flux_arr[pull,0] = line_fitting.compute_lineflux ( random_fit.amplitude_10, random_fit.stddev_0 ) # Hgamma
+        
+        # \\ also track continuum uncertainty
+        u_fc_arr[pull,2] =  random_fit.amplitude_1.value # Halpha
+        u_fc_arr[pull,1] =  random_fit.amplitude_7.value # Hbeta
+        u_fc_arr[pull,0] = random_fit.amplitude_11.value # Hgamma
+    
+    if fit_with_absorption:
+        line_fluxes = np.array([flux_arr_noabs,flux_arr, u_flux_arr.std(axis=0)])
+    else:
+        line_fluxes = np.array([flux_arr_noabs, u_flux_arr.std(axis=0)])
+    u_fc = u_fc_arr.std(axis=0)
+    elapsed = time.time() - start
+    
+    if verbose:
+        print(f'[u_flux] {elapsed:.0f} sec elapsed; {elapsed/npull:.2f} avg. laptime')    
+    
+    if isinstance(savefig, str):
+        if savefig == 'if_detect':
+            random_trip = np.random.uniform ( 0., 1. ) > .9
+            if (line_fluxes[0,1]/line_fluxes[2,1] > 1.) or random_trip:
+                visualize ( wave, flux, line_fluxes,u_fc, model_fit, model_fit_noabs, frandom, windowwidth, linewidth, z=z )
+    elif savefig:
+        visualize ( wave, flux, line_fluxes, u_fc, model_fit, model_fit_noabs, frandom, windowwidth, linewidth, z=z )
+    return line_fluxes, u_fc, model_fit, model_fit_noabs
+    
 def get_linewindow ( wave, line_wl, width=None):
     if width is None:
         width = _DEFAULT_LINE_WIDTH
     in_transmission = abs(wave-line_wl) <= (width/2.)
     return in_transmission
 
-def define_linemodel ( wave, flux, line_wl, ltype='emission', linewidth=None, windowwidth=None, line_wiggle=1.,
-                       stddev_init=3. ):
-    if linewidth is None:
-        linewidth = _DEFAULT_LINE_WIDTH         
-    if windowwidth is None:
-        windowwidth = _DEFAULT_WINDOW_WIDTH
-        
-    cmask = get_linewindow ( wave, line_wl, windowwidth )
-    continuum_init = np.median(flux[cmask])
-    if ltype=='emission':
-        lmask = get_linewindow ( wave, line_wl, linewidth )
-        amplitude_init = flux[lmask].max()
-        model_continuum = models.Box1D ( amplitude = continuum_init, x_0=line_wl, width=windowwidth )
-    elif ltype=='absorption':
-        amplitude_init = -1. * continuum_init * 0.25
-        
-    model_line = models.Gaussian1D ( amplitude = amplitude_init,
-                                   mean = line_wl, 
-                                   stddev = stddev_init )
-    if ltype=='emission':
-        lmodel = model_line + model_continuum
-        lmodel.mean_0.bounds = (line_wl-line_wiggle, line_wl+line_wiggle)
-    elif ltype=='absorption':
-        lmodel = model_line
-   
-    if ltype == 'emission':
-        lmodel.amplitude_0.bounds = (0., np.infty)
-        lmodel.stddev_0.bounds = (0., 4.)
-    elif ltype == 'absorption':
-        lmodel.amplitude.bounds = (-continuum_init*1.5, 0.)
-        lmodel.stddev.bounds = (0., 10.)
-        
-        
-    return lmodel
 
 def define_absorptionmodel ( wave, flux, line_wl, fwhm_init=10., windowwidth=None ):
     if windowwidth is None:
@@ -85,9 +170,6 @@ def define_continuummodel ( wave, flux, line_wl, windowwidth=None ):
     total_model = model_init * window    
     return total_model
 
-
-def tie_vdisp ( this_model ):
-    return this_model.stddev_0
 
 def tie_vdisp12 ( this_model ):
     return this_model.stddev_12
@@ -152,7 +234,8 @@ def build_continuummodel ( wave, flux, z=0., windowwidth=None ):
     
     return this_model
 
-def build_linemodel ( wave, flux, z=None, include_absorption=True):
+
+def build_restrictedlinemodel ( wave, flux, z=None, include_absorption=True):
     '''
     A line model which fits continuum + lines for Halpha, Hbeta, Hgamma and surrounding lines (especially OIII4363).
     The local continuum for each bloc is fit by a constant (Box1D); the linewidths are all tied to be equal.
@@ -210,6 +293,9 @@ def build_linemodel ( wave, flux, z=None, include_absorption=True):
     
     return this_model
 
+################
+#### LINE UTILS
+###############
 def compute_lineflux (amplitude, stddev):
     '''
     Integrate over astropy's Gaussian from -infty->infty
