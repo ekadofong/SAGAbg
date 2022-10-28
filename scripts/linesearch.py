@@ -120,7 +120,7 @@ def singleton (obj, dropbox_directory, **kwargs ):
     output = fit ( restwave, restflux, **kwargs )
     return output
 
-def fit ( wave, flux, z=0., npull = 100, verbose=True, fit_with_absorption=False, savefig='if_detect' ):
+def restricted_fit ( wave, flux, z=0., npull = 100, verbose=True, fit_with_absorption=False, savefig='if_detect' ):
     windowwidth = line_fitting._DEFAULT_WINDOW_WIDTH*(1.+z)
     linewidth = line_fitting._DEFAULT_LINE_WIDTH*(1.+z)
         

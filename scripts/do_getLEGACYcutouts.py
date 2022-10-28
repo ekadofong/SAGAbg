@@ -21,6 +21,7 @@ def load_surveybricks ( legacy_dir = None ):
     survey_bricks_south['region'] = 'south'
     
     survey_bricks = table.vstack ( [survey_bricks_north, survey_bricks_south] )
+        
     brick_coords = coordinates.SkyCoord ( survey_bricks['ra'], survey_bricks['dec'], unit=('deg','deg') )    
     survey_bricks.add_index('brickname')
     return survey_bricks, brick_coords
@@ -38,7 +39,8 @@ def download_brick ( row, dirstem = None, product_list=None, bands=None, savedir
     if savedir is None:
         savedir = '../../LegacyImaging/cutouts/'
     if product_list is None:
-        product_list = ['image','invar','maskbits','psfsize']
+        product_list = ['image','invvar','psfsize','maskbits']
+        
     if bands is None:
         bands = list('grz')        
     
@@ -47,13 +49,26 @@ def download_brick ( row, dirstem = None, product_list=None, bands=None, savedir
     brickstem = row['brickname'][:3]
     directory = f'{dirstem}{region}/coadd/{brickstem}/{brickname}/'
     filestem = f'legacysurvey-{brickname}-'
-    brickpath = f'{savedir}cutouts/{brickname}'
+    brickpath = f'{savedir}{brickname}'
     if not os.path.exists(brickpath):
         os.mkdir ( brickpath )
     
     for pname in product_list:
-        for band in bands:
-            link = f'{directory}{filestem}{pname}-{band}.fits.fz'
-            result = subprocess.run ( ['curl','-o',f'{savedir}{brickname}/{os.path.basename(link)}', link])
+        if pname == 'maskbits':
+            link = f'{directory}{filestem}{pname}.fits.fz'
+            savefile = f'{savedir}{brickname}/{os.path.basename(link)}'
+            if os.path.exists(savefile):
+                continue
+            subprocess.run ( ['curl','-o',savefile, link])            
+        else:
+            for band in bands:
+                link = f'{directory}{filestem}{pname}-{band}.fits.fz'
+                savefile = f'{savedir}{brickname}/{os.path.basename(link)}'
+                if os.path.exists(savefile):
+                    continue
+                subprocess.run ( ['curl','-o',savefile, link])
+        
+        
+
             
             
