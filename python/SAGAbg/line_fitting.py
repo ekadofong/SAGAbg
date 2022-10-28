@@ -1,9 +1,8 @@
-from math import dist
-from turtle import window_width
 import numpy as np
 from astropy import constants as co
 from astropy import units as u
-from astropy import modeling 
+from astropy import modeling
+import pyneb as pn 
 from ekfparse import strings
 from .models import *
 from .line_db import *
@@ -19,12 +18,7 @@ def establish_tie ( this_model, tied_attribute ):
     def tie ( this_model ):
         return getattr ( this_model, tied_attribute )
     return tie
-    
-def tie_vdisp ( this_model ):
-    return this_model.stddev_0
 
-def tie_ew (this_model):
-    return this_model.ew_0
 
 
 def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True ):
@@ -32,9 +26,23 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     A more generalized line model that includes all of lines described at top.
     Each line gets its own continuum, so we'll see how the fits go.
     '''
+    is_finite = np.isfinite(flux)
+    wave = wave[is_finite]
+    flux = flux[is_finite]
     if z is None:
         z=0.
+
+    # \\ initialize Balmer lines based of Halpha
+    balmer_levels = np.array([1., 2.86, 6.11, 11.05 ])
+    in_halpha, in_hwindow = get_lineblocs ( wave, z=z, lines=line_wavelengths['Halpha'] )
+    cinit = np.median(flux[~in_halpha&in_hwindow])
+    halpha_init = (np.max(flux[in_halpha]) - cinit)
+    balmer_init = halpha_init / balmer_levels
+    balmer_init = dict(zip(BALMER_ABSORPTION, balmer_init))
     
+    # \\ initialize OIII lines based on [OIII]5007
+    
+
     model_list = []
     parameter_indices = []
     for linename in line_wavelengths.keys():
@@ -44,8 +52,14 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
         else:
             add_continuum = True
             
+        if linename in BALMER_ABSORPTION:
+            ainit = balmer_init[linename]            
+        else:
+            ainit = None 
+        
         component = define_linemodel ( wave, flux, line_wavelengths[linename], z=z, linewidth=line_width,
-                                             windowwidth=window_width, add_continuum=add_continuum )
+                                             windowwidth=window_width, add_continuum=add_continuum,
+                                             amplitude_init=ainit)
         parameter_indices.append(f'emission{linename}')
         if add_continuum:
             parameter_indices.append(f'continuum{linename}')
@@ -53,7 +67,7 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
         # \\ add Balmer emission where
         # \\ the EW is held constant
         if (linename in BALMER_ABSORPTION) and add_absorption:
-            absorption = define_linemodel ( wave, flux, line_wavelengths[linename]*(1.+z), ltype='absorption')
+            absorption = define_linemodel ( wave, flux, line_wavelengths[linename], z=z, stddev_init=6., ltype='absorption')
             parameter_indices.append(f'absorption{linename}')           
             component = component + absorption 
         model_list.append(component)
@@ -71,34 +85,51 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     for sname in emission_stddevs[1:]:
         getattr(model_init, sname).tied = tie_emstd
     
-    # \\ all absorption linewidths are constrained to be the same
-    absorption_indices = strings.where_substring ( parameter_indices, 'absorption' )
-    absorption_stddevs = [ 'stddev_%i'%i for i in absorption_indices ]
-    tie_abstd = establish_tie ( model_init, absorption_stddevs[0] )
-    for sname in absorption_stddevs[1:]:
-        getattr(model_init, sname).tied = tie_abstd
-    
-    # \\ all absorption equivalent widths are constrained to be the same
-    absorption_ews = [ 'EW_%i'%i for i in absorption_indices ]
-    tie_abew = establish_tie ( model_init, absorption_ews[0] )
-    for sname in absorption_ews[1:]:
-        getattr(model_init, sname).tied = tie_abew
+    if add_absorption:
+        # \\ all absorption linewidths are constrained to be the same
+        absorption_indices = strings.where_substring ( parameter_indices, 'absorption' )
+        absorption_stddevs = [ 'stddev_%i'%i for i in absorption_indices ]
+        tie_abstd = establish_tie ( model_init, absorption_stddevs[0] )
+        for sname in absorption_stddevs[1:]:
+            getattr(model_init, sname).tied = tie_abstd
+        
+        # \\ all absorption equivalent widths are constrained to be the same
+        absorption_ews = [ 'EW_%i'%i for i in absorption_indices ]
+        tie_abew = establish_tie ( model_init, absorption_ews[0] )
+        for sname in absorption_ews[1:]:
+            getattr(model_init, sname).tied = tie_abew
+            
+        # \\ the absorption continuum values should be drawn from the
+        # \\ fitted continuum models
+        # \\ assume that the continuum model directly precedes
+        # \\ the absorption model
+        for index in absorption_indices:
+            tie2continuum = establish_tie ( model_init, 'amplitude_%i' % (index-1) )
+            fc = 'fc_%i' % index
+            getattr(model_init, fc).tied = tie2continuum
+            
+        # \\ all absorption line positions should be tied to their emission counterparts
+        for index in absorption_indices:
+            tie2emission = establish_tie ( model_init, 'mean_%i' % (index-2) )
+            mc = 'mean_%i' % index
+            getattr(model_init, mc).tied = tie2emission       
         
     return model_init, np.asarray(parameter_indices)
 
-def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False ):
-    window_width = _DEFAULT_WINDOW_WIDTH*(1.+z)
-    line_width = _DEFAULT_LINE_WIDTH*(1.+z)
+def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False, add_absorption=True ):
+    window_width = DEFAULT_WINDOW_WIDTH*(1.+z)
+    line_width = DEFAULT_LINE_WIDTH*(1.+z)
         
     # \\ define spectrum
-    this_model = build_linemodel ( wave, flux, z=z, window_width=window_width, line_width=line_width )
+    this_model, indices = build_ovlmodel ( wave, flux, z=z, window_width=window_width, line_width=line_width,
+                                           add_absorption=add_absorption)
     #pmodel = models.Polynomial1D(2, c0=np.median(flux), c1=0., c2=0. )
     #this_model = this_model + pmodel 
-    in_line, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
+    _, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
     
     fitter = fitting.LevMarLSQFitter ()    
     model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
-    return model_fit
+    return model_fit, indices
     
     # \\ same, for no absorption model
     halpha_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_0, model_fit_noabs.stddev_0 )
@@ -155,14 +186,14 @@ def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False ):
     
 def get_linewindow ( wave, line_wl, width=None):
     if width is None:
-        width = _DEFAULT_LINE_WIDTH
+        width = DEFAULT_LINE_WIDTH
     in_transmission = abs(wave-line_wl) <= (width/2.)
     return in_transmission
 
 
 def define_absorptionmodel ( wave, flux, line_wl, fwhm_init=10., windowwidth=None ):
     if windowwidth is None:
-        windowwidth = _DEFAULT_WINDOW_WIDTH
+        windowwidth = DEFAULT_WINDOW_WIDTH
     
     cmask = get_linewindow ( wave, line_wl, windowwidth )
     continuum_init = np.median(flux[cmask])
@@ -181,7 +212,7 @@ def define_absorptionmodel ( wave, flux, line_wl, fwhm_init=10., windowwidth=Non
      
 def define_continuummodel ( wave, flux, line_wl, windowwidth=None ):
     if windowwidth is None:
-        windowwidth = _DEFAULT_WINDOW_WIDTH
+        windowwidth = DEFAULT_WINDOW_WIDTH
     
     #cmask = get_linewindow ( wave, line_wl, windowwidth )
     #continuum_init = np.median(flux[cmask])
@@ -208,9 +239,9 @@ def tie_mean10 ( this_model ):
 
 def define_lineblocs ( wave, z=0., windowwidth=None, linewidth=None ):
     if windowwidth is None:
-        windowwidth = _DEFAULT_WINDOW_WIDTH
+        windowwidth = DEFAULT_WINDOW_WIDTH
     if linewidth is None:
-        linewidth = _DEFAULT_LINE_WIDTH
+        linewidth = DEFAULT_LINE_WIDTH
     outside_windows = abs(wave - line_wavelengths['Halpha']*(1.+z)) > windowwidth/2.
     outside_windows &= abs(wave - line_wavelengths['Hbeta']*(1.+z)) > windowwidth/2.
     outside_windows &= abs(wave - line_wavelengths['Hgamma']*(1.+z)) > windowwidth/2.
