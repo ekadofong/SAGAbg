@@ -15,8 +15,9 @@ line_lists = [balmer_wavelengths, OIII_wavelengths, OII_wavelengths, SII_wavelen
 line_wavelengths = {}
 for ll in line_lists:
     line_wavelengths.update(ll)
+Nlines = len(line_wavelengths.keys())
 
-CONTINUUM_TAGS = ['Halpha','Hbeta','Hgamma','Hdelta','[OIII]5007','[SII]6716','FeX','[OII]3729']
+CONTINUUM_TAGS = ['Halpha','Hbeta','Hgamma','Hdelta','[OIII]5007','[SII]6716','FeX',]
 BALMER_ABSORPTION = ['Halpha','Hbeta','Hgamma','Hdelta']
 
 ## DEFAULT VALUES

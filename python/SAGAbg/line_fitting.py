@@ -1,8 +1,12 @@
+#import time
+#from webbrowser import get
+from operator import add
 import numpy as np
+import pandas as pd
 from astropy import constants as co
 from astropy import units as u
 from astropy import modeling
-import pyneb as pn 
+#import pyneb as pn 
 from ekfparse import strings
 from .models import *
 from .line_db import *
@@ -40,9 +44,6 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     balmer_init = halpha_init / balmer_levels
     balmer_init = dict(zip(BALMER_ABSORPTION, balmer_init))
     
-    # \\ initialize OIII lines based on [OIII]5007
-    
-
     model_list = []
     parameter_indices = []
     for linename in line_wavelengths.keys():
@@ -116,7 +117,7 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
         
     return model_init, np.asarray(parameter_indices)
 
-def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False, add_absorption=True ):
+def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     window_width = DEFAULT_WINDOW_WIDTH*(1.+z)
     line_width = DEFAULT_LINE_WIDTH*(1.+z)
         
@@ -129,223 +130,71 @@ def fit ( wave, flux, z=0., npull = 100, verbose=True, savefig=False, add_absorp
     
     fitter = fitting.LevMarLSQFitter ()    
     model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
-    return model_fit, indices
+    #return model_fit, indices
+    # \\ let's also estimate the uncertainty in the line fluxes    
+    u_flux_arr = np.zeros([npull, Nlines])
+    u_fc_arr = np.zeros([npull, len(CONTINUUM_TAGS)])
+    u_global_arr = np.zeros([npull, 3])
     
-    # \\ same, for no absorption model
-    halpha_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_0, model_fit_noabs.stddev_0 )
-    oiii_flux = line_fitting.compute_lineflux   ( model_fit_noabs.amplitude_8, model_fit_noabs.stddev_0 )
-    hbeta_flux = line_fitting.compute_lineflux  ( model_fit_noabs.amplitude_6, model_fit_noabs.stddev_0 )
-    hgamma_flux = line_fitting.compute_lineflux ( model_fit_noabs.amplitude_10,model_fit_noabs.stddev_0 )
-    flux_arr_noabs = np.array([hgamma_flux, oiii_flux, hbeta_flux, halpha_flux])     
+    emission_indices = strings.where_substring(indices, 'emission')
+    continuum_indices = strings.where_substring(indices, 'continuum')
+    #absorption_indices = strings.where_substring(indices, 'absorption')
     
-    # \\ let's also estimate the uncertainty in the line fluxes
-    halpha_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Halpha']*(1.+z), windowwidth )
-    hbeta_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Hbeta']*(1.+z), windowwidth )
-    hgamma_bloc = line_fitting.get_linewindow ( wave, line_wavelengths['Hgamma']*(1.+z), windowwidth )
-    
-    u_flux_arr = np.zeros([npull, 4])
-    u_fc_arr = np.zeros([npull,3])
-    
-    start = time.time ()
     for pull in range(npull):
         # \\ repull from non-line local areas of the spectrum
         frandom = np.zeros_like(wave)
-        frandom[halpha_bloc] = np.random.choice(flux[halpha_bloc&outside_lines], size=halpha_bloc.sum(), replace=True)
-        frandom[hbeta_bloc] = np.random.choice(flux[hbeta_bloc&outside_lines], size=hbeta_bloc.sum(), replace=True)
-        frandom[hgamma_bloc] = np.random.choice(flux[hgamma_bloc&outside_lines], size=hgamma_bloc.sum(), replace=True)
+        for continuum_tag in CONTINUUM_TAGS:
+            line_bloc, window_bloc = get_lineblocs ( wave, z=z, lines=line_wavelengths[continuum_tag] )
+            frandom[window_bloc] = np.random.choice ( flux[window_bloc&~line_bloc], size=window_bloc.sum(), replace=True)
+        #\\ refit                
+        random_fit = fitter ( this_model, wave[in_window], frandom[in_window] )
         
-        random_fit = fitter ( this_model_noabs, wave[~outside_windows], frandom[~outside_windows] )
-        u_flux_arr[pull,3] = line_fitting.compute_lineflux ( random_fit.amplitude_0, random_fit.stddev_0 ) # Halpha
-        u_flux_arr[pull,1] = line_fitting.compute_lineflux  (  random_fit.amplitude_8, random_fit.stddev_0 ) # OIII
-        u_flux_arr[pull,2] = line_fitting.compute_lineflux  ( random_fit.amplitude_6, random_fit.stddev_0 ) # Hbeta
-        u_flux_arr[pull,0] = line_fitting.compute_lineflux ( random_fit.amplitude_10, random_fit.stddev_0 ) # Hgamma
+        #\\ slot in random fit values
+        for index,ei in enumerate(emission_indices):
+            u_flux_arr[pull,index] = compute_lineflux ( getattr(random_fit, 'amplitude_%i'%ei), getattr(random_fit, 'stddev_%i'%ei) )
+       
+        for index,ci in enumerate(continuum_indices):            
+            u_fc_arr[pull, index] = getattr ( random_fit, 'amplitude_%i' % ci ).value
+            
+        u_global_arr[pull, 0] = random_fit.stddev_0.value
+        u_global_arr[pull, 1] = random_fit.stddev_2.value
+        if add_absorption:
+            u_global_arr[pull, 2] = random_fit.EW_2.value
         
-        # \\ also track continuum uncertainty
-        u_fc_arr[pull,2] =  random_fit.amplitude_1.value # Halpha
-        u_fc_arr[pull,1] =  random_fit.amplitude_7.value # Hbeta
-        u_fc_arr[pull,0] = random_fit.amplitude_11.value # Hgamma
+    #elapsed = time.time() - start
+    emission_df = pd.DataFrame ( index=line_wavelengths.keys(), columns=['flux', 'u_flux'] )
+    global_params = pd.DataFrame ( index=['sigma_em', 'sigma_abs', 'EW_abs'], columns=['val','u_val'] )
+    continuum_df = pd.DataFrame ( index=CONTINUUM_TAGS, columns=['fc','u_fc'] )
     
-    if fit_with_absorption:
-        line_fluxes = np.array([flux_arr_noabs,flux_arr, u_flux_arr.std(axis=0)])
-    else:
-        line_fluxes = np.array([flux_arr_noabs, u_flux_arr.std(axis=0)])
-    u_fc = u_fc_arr.std(axis=0)
-    elapsed = time.time() - start
+    for ei in emission_indices:
+        lineflux = compute_lineflux ( getattr(model_fit, 'amplitude_%i'%ei), getattr(model_fit, 'stddev_%i'%ei) ) 
+        #\\ x 10^-17 erg / s / cm^2
+        emission_df.loc[indices[ei].strip('emission'),'flux'] = lineflux
+    emission_df['u_flux'] = np.nanstd(u_flux_arr,axis=0)
     
-    if verbose:
-        print(f'[u_flux] {elapsed:.0f} sec elapsed; {elapsed/npull:.2f} avg. laptime')    
+    for ci in continuum_indices:
+        fc = getattr(model_fit, 'amplitude_%i' % ci).value
+        continuum_df.loc[indices[ci].strip('continuum'), 'fc'] = fc
+    continuum_df['u_fc'] = np.nanstd(u_fc_arr, axis=0)
     
-    if isinstance(savefig, str):
-        if savefig == 'if_detect':
-            random_trip = np.random.uniform ( 0., 1. ) > .9
-            if (line_fluxes[0,1]/line_fluxes[2,1] > 1.) or random_trip:
-                visualize ( wave, flux, line_fluxes,u_fc, model_fit, model_fit_noabs, frandom, windowwidth, linewidth, z=z )
-    elif savefig:
-        visualize ( wave, flux, line_fluxes, u_fc, model_fit, model_fit_noabs, frandom, windowwidth, linewidth, z=z )
-    return line_fluxes, u_fc, model_fit, model_fit_noabs
+    global_params.loc['sigma_em', 'val'] = model_fit.stddev_0.value
+    global_params.loc['sigma_abs', 'val'] = model_fit.stddev_2.value
+    if add_absorption:
+        global_params.loc['EW_abs', 'val'] = model_fit.EW_2.value
     
-def get_linewindow ( wave, line_wl, width=None):
-    if width is None:
-        width = DEFAULT_LINE_WIDTH
-    in_transmission = abs(wave-line_wl) <= (width/2.)
-    return in_transmission
-
-
-def define_absorptionmodel ( wave, flux, line_wl, fwhm_init=10., windowwidth=None ):
-    if windowwidth is None:
-        windowwidth = DEFAULT_WINDOW_WIDTH
+    ug = np.nanstd(u_global_arr, axis=0)
+    global_params.loc['sigma_em', 'u_val'] = ug[0]
+    global_params.loc['sigma_abs', 'u_val'] = ug[1]
+    if add_absorption:
+        global_params.loc['EW_abs', 'u_val'] = ug[2]   
     
-    cmask = get_linewindow ( wave, line_wl, windowwidth )
-    continuum_init = np.median(flux[cmask])
-    amplitude_init = -1. * continuum_init * 0.25
+    return (emission_df, continuum_df, global_params), (model_fit, indices)
     
-    model_init = models.Lorentz1D ( amplitude=amplitude_init, 
-                                    x_0 = line_wl, 
-                                    fwhm = fwhm_init  )
-    model_init.x_0.fixed = True
-    model_init.amplitude.bounds = [-np.infty, 0.]
-    
-    #model_continuum = models.Box1D ( amplitude = continuum_init, x_0=line_wl, width=windowwidth )
-    
-    total_model = model_init #+ model_continuum
-    return total_model
-     
-def define_continuummodel ( wave, flux, line_wl, windowwidth=None ):
-    if windowwidth is None:
-        windowwidth = DEFAULT_WINDOW_WIDTH
-    
-    #cmask = get_linewindow ( wave, line_wl, windowwidth )
-    #continuum_init = np.median(flux[cmask])
-    
-    model_init = models.Linear1D (slope=0., intercept = 0.)
-    window = models.Box1D ( amplitude = 1., x_0=line_wl, width=windowwidth )
-    window.amplitude.fixed = True
-
-    total_model = model_init * window    
-    return total_model
-
-
-def tie_vdisp12 ( this_model ):
-    return this_model.stddev_12
-
-def tie_mean0 ( this_model ):
-    return this_model.mean_0 
-
-def tie_mean6 ( this_model ):
-    return this_model.mean_6
-
-def tie_mean10 ( this_model ):
-    return this_model.mean_10
-
-def define_lineblocs ( wave, z=0., windowwidth=None, linewidth=None ):
-    if windowwidth is None:
-        windowwidth = DEFAULT_WINDOW_WIDTH
-    if linewidth is None:
-        linewidth = DEFAULT_LINE_WIDTH
-    outside_windows = abs(wave - line_wavelengths['Halpha']*(1.+z)) > windowwidth/2.
-    outside_windows &= abs(wave - line_wavelengths['Hbeta']*(1.+z)) > windowwidth/2.
-    outside_windows &= abs(wave - line_wavelengths['Hgamma']*(1.+z)) > windowwidth/2.
-
-    outside_lines = abs(wave - line_wavelengths['Halpha']*(1.+z)) > linewidth/2.
-    outside_lines &= abs(wave - line_wavelengths['NII6548']*(1.+z)) > linewidth/2.  
-    outside_lines &= abs(wave - line_wavelengths['NII6583']*(1.+z)) > linewidth/2.   
-    outside_lines &= abs(wave - line_wavelengths['Hbeta']*(1.+z)) > linewidth/2. 
-    outside_lines &= abs(wave - line_wavelengths['OIII4363']*(1.+z)) > linewidth/2. 
-    outside_lines &= abs(wave - line_wavelengths['Hgamma']*(1.+z)) > linewidth/2. 
-    return outside_windows, outside_lines
-
-
-def tie_fwhm ( this_model ):
-    return this_model.fwhm_0
 
 def compute_absew ( amplitude, fwhm, fc ):
     abs_flux = amplitude * fwhm * np.pi # < 0
     return abs_flux / fc
 
-def build_absorptionmodel ( wave, flux, z=0. ):
-    # 0 Halpha
-    # 2 Hbeta
-    # 4 Hgamma
-    model_haABS = define_absorptionmodel ( wave, flux, line_wavelengths['Halpha']*(1.+z))
-    model_hbABS = define_absorptionmodel ( wave, flux, line_wavelengths['Hbeta'] *(1.+z))
-    model_hgABS = define_absorptionmodel ( wave, flux, line_wavelengths['Hgamma']*(1.+z))
-    
-    this_model = model_haABS + model_hbABS + model_hgABS
-    this_model.fwhm_1.tied = tie_fwhm
-    this_model.fwhm_2.tied = tie_fwhm
-    
-    return this_model
-
-def build_continuummodel ( wave, flux, z=0., windowwidth=None ):
-    # 0 Halpha
-    # 2 Hbeta
-    # 4 Hgamma
-    model_haBOX = define_continuummodel ( wave, flux, line_wavelengths['Halpha']*(1.+z), windowwidth=windowwidth)
-    model_hbBOX = define_continuummodel ( wave, flux, line_wavelengths['Hbeta'] *(1.+z), windowwidth=windowwidth)
-    model_hgBOX = define_continuummodel ( wave, flux, line_wavelengths['Hgamma']*(1.+z), windowwidth=windowwidth)
-    
-    this_model = model_haBOX + model_hbBOX + model_hgBOX
-    
-    return this_model
-
-
-def build_restrictedlinemodel ( wave, flux, z=None, include_absorption=True):
-    '''
-    A line model which fits continuum + lines for Halpha, Hbeta, Hgamma and surrounding lines (especially OIII4363).
-    The local continuum for each bloc is fit by a constant (Box1D); the linewidths are all tied to be equal.
-    '''
-    if z is None:
-        z = 0.
-    model_ha = define_linemodel ( wave, flux, line_wavelengths['Halpha']*(1. + z) )
-    model_niib = define_linemodel ( wave, flux, line_wavelengths['NII6548']*(1. + z ) )
-    model_niir = define_linemodel ( wave, flux, line_wavelengths['NII6583']*(1. + z ) )
-    model_hb = define_linemodel ( wave, flux, line_wavelengths['Hbeta']*(1. + z ) )
-    model_oiii4363 = define_linemodel ( wave, flux, line_wavelengths['OIII4363']*(1. + z ) )
-    model_hgamma = define_linemodel ( wave, flux, line_wavelengths['Hgamma']*(1. + z ) )
-    
-    if include_absorption:
-        model_ha_abs = define_linemodel ( wave, flux, line_wavelengths['Halpha']*(1. + z), 'absorption')
-        model_hb_abs = define_linemodel ( wave, flux, line_wavelengths['Hbeta']*(1. + z), 'absorption')
-        model_hg_abs = define_linemodel ( wave, flux, line_wavelengths['Hgamma']*(1. + z), 'absorption')
-        
-    # \\ Line dictionaries
-    # 0 : Halpha
-    # 2 : NII6548
-    # 4 : NII6583
-    # 6 : Hbeta
-    # 8 : OIII4363
-    # 10: Hgamma
-    # 12 : Halpha (absorption)
-    # 13 : Hbeta (absorption)
-    # 14 : Hgamma (absorption)
-    this_model = model_ha + model_niib + model_niir + model_hb + model_oiii4363 + model_hgamma
-    if include_absorption:
-        this_model = this_model + model_ha_abs + model_hb_abs  + model_hg_abs
-        this_model.stddev_13.tied = tie_vdisp12
-        this_model.stddev_14.tied = tie_vdisp12
-        
-        this_model.mean_12.tied = tie_mean0
-        this_model.mean_13.tied = tie_mean6
-        this_model.mean_14.tied = tie_mean10
-
-    # \\ all linewidths are constrained to be the same
-    this_model.stddev_2.tied = tie_vdisp # tie linewidths together
-    this_model.stddev_4.tied = tie_vdisp # tie linewidths together
-    this_model.stddev_6.tied = tie_vdisp # tie linewidths together
-    this_model.stddev_8.tied = tie_vdisp # tie linewidths together
-    this_model.stddev_10.tied = tie_vdisp # tie linewidths together
-
-    # \\ NII continuum should be the same as Halpha
-    this_model.amplitude_3 = 0.
-    this_model.amplitude_3.fixed = True
-    this_model.amplitude_5 = 0.
-    this_model.amplitude_5.fixed = True
-
-    # \\ OIII continuum should be the same as Hgamma
-    this_model.amplitude_9 = 0.
-    this_model.amplitude_9.fixed = True        
-    
-    return this_model
 
 ################
 #### LINE UTILS
