@@ -2,19 +2,15 @@ import numpy as np
 from astropy import modeling 
 from .line_db import *
 
-## DEFAULT VALUES
-_DEFAULT_WINDOW_WIDTH = 140.
-_DEFAULT_LINE_WIDTH = 14.
-
 def get_lineblocs ( wave, z=0., lines=None, window_width=None, line_width=None ):
     '''
     Define the region under a line and the region in the window of analysis for that
     line (line + continuum)
     '''
     if window_width is None:
-        window_width = _DEFAULT_WINDOW_WIDTH*(1.+z)
+        window_width = DEFAULT_WINDOW_WIDTH*(1.+z)
     if line_width is None:
-        line_width = _DEFAULT_LINE_WIDTH*(1.+z)
+        line_width = DEFAULT_LINE_WIDTH*(1.+z)
     if lines is None:
         lines = np.asarray(list(line_wavelengths.values()))
     elif isinstance(lines, float):
@@ -47,25 +43,29 @@ def construct_absorbermodel ( ):
     mod = modeling.custom_model ( ew_abs, fit_deriv=fit_deriv )   
     return mod 
 
-def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=None, windowwidth=None, line_wiggle=1.,
-                       stddev_init=3., add_continuum=True ):
+def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=None, windowwidth=None, line_wiggle=2.,
+                       stddev_init=3., add_continuum=True, amplitude_init=None ):
     if linewidth is None:
-        linewidth = _DEFAULT_LINE_WIDTH
+        linewidth = DEFAULT_LINE_WIDTH
     if windowwidth is None:
-        windowwidth = _DEFAULT_WINDOW_WIDTH
+        windowwidth = DEFAULT_WINDOW_WIDTH
         
-    cmask, _ = get_lineblocs ( wave, z=z, lines=line_wl, window_width=windowwidth, line_width=linewidth )
+    #line_wl = line_wl*(1.+z)
+    cmask, wmask = get_lineblocs ( wave, z=z, lines=line_wl, window_width=windowwidth, line_width=linewidth )
 
-    continuum_init = np.median(flux[cmask])
+    continuum_init = np.median(flux[wmask&~cmask])
     if ltype=='emission':        
-        amplitude_init = flux[cmask].max()
+        if amplitude_init is None:
+            amplitude_init = flux[cmask].max() #- continuum_init
+        
         if add_continuum:
-            model_continuum = modeling.models.Box1D ( amplitude = continuum_init, x_0=line_wl, width=windowwidth )
+            model_continuum = modeling.models.Box1D ( amplitude = continuum_init, x_0=line_wl*(1.+z), 
+                                                     width=windowwidth )
             
         line_model = modeling.models.Gaussian1D ( amplitude = amplitude_init,
-                                    mean = line_wl, 
+                                    mean = line_wl*(1.+z), 
                                     stddev = stddev_init )  
-        line_model.mean.bounds = (line_wl-line_wiggle, line_wl+line_wiggle)   
+        line_model.mean.bounds = (line_wl*(1.+z)-line_wiggle, line_wl*(1.+z)+line_wiggle)   
         line_model.amplitude.bounds = (0., np.infty)
         line_model.stddev.bounds = (0., 4.)    
         
@@ -82,10 +82,11 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
         '''
         amplitude_init = -1. * continuum_init * 0.25
         ew_init = amplitude_init * np.sqrt(2.*np.pi) * stddev_init / continuum_init
-        lmodel = construct_absorbermodel()( mean = line_wl, fc=continuum_init, stddev=stddev_init, 
-                                                EW = ew_init )                
-        lmodel.EW.bounds = (-40., 0.)
-        lmodel.stddev.bounds = (0., 10.)
-        lmodel.mean.bounds = (line_wl - line_wiggle, line_wl + line_wiggle)
+        
+        lmodel = construct_absorbermodel()( mean = line_wl*(1.+z), fc=continuum_init, stddev=stddev_init, 
+                                            EW = ew_init )                
+        lmodel.EW.bounds = (-10., 0.)
+        lmodel.stddev.bounds = (3., 10.)
+        lmodel.mean.bounds = (line_wl*(1.+z) - line_wiggle, line_wl*(1.+z) + line_wiggle)
    
     return lmodel
