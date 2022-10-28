@@ -4,6 +4,7 @@ import numpy as np
 from astropy import constants as co
 from astropy import units as u
 from astropy import modeling 
+from ekfparse import strings
 from .models import *
 from .line_db import *
 #import models, fitting
@@ -14,6 +15,11 @@ fitting = modeling.fitting
 c_angpers = co.c.to(u.AA/u.s).value
 gAB_nu = (3631.*u.Jy).to(u.erg/u.s/u.cm**2/u.Hz).value
 
+def establish_tie ( this_model, tied_attribute ):
+    def tie ( this_model ):
+        return getattr ( this_model, tied_attribute )
+    return tie
+    
 def tie_vdisp ( this_model ):
     return this_model.stddev_0
 
@@ -34,32 +40,49 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     for linename in line_wavelengths.keys():
         # \\ sort out continuum
         if linename not in CONTINUUM_TAGS:
-            add_continuum = True
-        else:
             add_continuum = False
+        else:
+            add_continuum = True
             
         component = define_linemodel ( wave, flux, line_wavelengths[linename], z=z, linewidth=line_width,
                                              windowwidth=window_width, add_continuum=add_continuum )
         parameter_indices.append(f'emission{linename}')
         if add_continuum:
-            paramater_indices.append(f'continuum{linename}')
+            parameter_indices.append(f'continuum{linename}')
             
         # \\ add Balmer emission where
         # \\ the EW is held constant
         if (linename in BALMER_ABSORPTION) and add_absorption:
             absorption = define_linemodel ( wave, flux, line_wavelengths[linename]*(1.+z), ltype='absorption')
-            paramater_indices.append(f'absorption{linename}')           
+            parameter_indices.append(f'absorption{linename}')           
             component = component + absorption 
         model_list.append(component)
     model_init = model_list[0]
     for ix in range(1, len(model_list)):
         model_init = model_init + model_list[ix]
-        
-    # \\ all linewidths are constrained to be the same
-    for sname in [x for x in model_init.param_names if 'stddev' in x]:
-        if sname == 'stddev_0':
-            continue
-        getattr(model_init, sname).tied = tie_vdisp
+     
+    #####   
+    # \\ START tying parameters together
+    #####  
+    # \\ all emission linewidths are constrained to be the same
+    emission_indices = strings.where_substring ( parameter_indices, 'emission' )
+    emission_stddevs = [ 'stddev_%i'%i for i in emission_indices ]
+    tie_emstd = establish_tie ( model_init, emission_stddevs[0] )
+    for sname in emission_stddevs[1:]:
+        getattr(model_init, sname).tied = tie_emstd
+    
+    # \\ all absorption linewidths are constrained to be the same
+    absorption_indices = strings.where_substring ( parameter_indices, 'absorption' )
+    absorption_stddevs = [ 'stddev_%i'%i for i in absorption_indices ]
+    tie_abstd = establish_tie ( model_init, absorption_stddevs[0] )
+    for sname in absorption_stddevs[1:]:
+        getattr(model_init, sname).tied = tie_abstd
+    
+    # \\ all absorption equivalent widths are constrained to be the same
+    absorption_ews = [ 'EW_%i'%i for i in absorption_indices ]
+    tie_abew = establish_tie ( model_init, absorption_ews[0] )
+    for sname in absorption_ews[1:]:
+        getattr(model_init, sname).tied = tie_abew
         
     return model_init, np.asarray(parameter_indices)
 

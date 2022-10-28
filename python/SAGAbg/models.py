@@ -6,7 +6,7 @@ from .line_db import *
 _DEFAULT_WINDOW_WIDTH = 140.
 _DEFAULT_LINE_WIDTH = 14.
 
-def get_lineblocs ( wave, z=0., line_d=None, lines=None, window_width=None, line_width=None ):
+def get_lineblocs ( wave, z=0., lines=None, window_width=None, line_width=None ):
     '''
     Define the region under a line and the region in the window of analysis for that
     line (line + continuum)
@@ -18,8 +18,9 @@ def get_lineblocs ( wave, z=0., line_d=None, lines=None, window_width=None, line
     if lines is None:
         lines = np.asarray(list(line_wavelengths.values()))
     elif isinstance(lines, float):
-        lines = np.asarray(lines)
-    print(lines)
+        lines = np.asarray([lines])
+        
+
     lines = lines*(1. + z)
     
     distance_from_lines =abs(wave[np.newaxis,:] - lines[:,np.newaxis])
@@ -54,7 +55,7 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
         windowwidth = _DEFAULT_WINDOW_WIDTH
         
     cmask, _ = get_lineblocs ( wave, z=z, lines=line_wl, window_width=windowwidth, line_width=linewidth )
-    print(cmask)
+
     continuum_init = np.median(flux[cmask])
     if ltype=='emission':        
         amplitude_init = flux[cmask].max()
@@ -83,7 +84,7 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
         ew_init = amplitude_init * np.sqrt(2.*np.pi) * stddev_init / continuum_init
         lmodel = construct_absorbermodel()( mean = line_wl, fc=continuum_init, stddev=stddev_init, 
                                                 EW = ew_init )                
-        lmodel.ew.bounds = (-40., 0.)
+        lmodel.EW.bounds = (-40., 0.)
         lmodel.stddev.bounds = (0., 10.)
         lmodel.mean.bounds = (line_wl - line_wiggle, line_wl + line_wiggle)
    
