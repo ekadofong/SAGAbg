@@ -2,7 +2,7 @@
 #SBATCH --job-name=sedfit
 #SBATCH --cpus-per-task=1
 #SBATCH -t 0-0:10:00
-#SBATCH --mem-per-cpu=1700M
+#SBATCH --mem-per-cpu=4G
 
 module load miniconda
 conda activate vgrace
