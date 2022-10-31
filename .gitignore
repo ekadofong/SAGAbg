@@ -3,6 +3,7 @@ saga/
 figures/
 local_data/
 notebooks/
+scripts/dep/
 
 
 # Byte-compiled / optimized / DLL files

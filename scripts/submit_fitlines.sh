@@ -6,4 +6,4 @@
 
 module load miniconda
 conda activate vgrace
-python do_fitlines
+python do_fitlines.py -d /home/ek757/surveys/SAGAbg/local_data/ -S 0 -E 10 
