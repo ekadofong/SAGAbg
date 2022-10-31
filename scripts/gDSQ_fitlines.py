@@ -1,6 +1,6 @@
 import argparse
 
-def build_dsqQ ( step, nobj=0, source='SBAM', dropbox_directory=None ):
+def build_dsqQ ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
     if dropbox_directory is None:
         dropbox_directory = '../local_data/'
     if n_objects==0:
@@ -21,6 +21,7 @@ def build_dsqQ ( step, nobj=0, source='SBAM', dropbox_directory=None ):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser ( prog='gDSQ_fitlines.py', description='generate Dead Simple Queue worklist for fitlines' )
     parser.add_argument ( '--step', '-s', action='store', default=1)
+    parser.add_argument ( '--nobjects', '-N', action='store', default=0)
     args = parser.parse_args ()
     step = int(args.step)
-    build_dsqQ ( step )
+    build_dsqQ ( step, n_objects=int(args.nobjects) )
