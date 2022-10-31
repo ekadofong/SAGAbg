@@ -81,7 +81,8 @@ def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
         end = None
     else:
         step = (end - start) // nfig
-        
+    if step < 1:
+        step = 1
     
     fulltime = time.time ()
     for idx,(name, row) in enumerate(parent.iloc[start:end].iterrows ()):
@@ -112,5 +113,5 @@ if __name__ == '__main__':
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=0, help='ending index')
     args = parser.parse_args ()
-    print(args.nfig)
+
     main ( args.dropbox_directory, nfig=args.nfig, start=int(args.start), end=int(args.end), )
