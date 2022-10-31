@@ -1,13 +1,13 @@
 import argparse
-import catalogs
 
-def build_dsqQ ( step, source='SBAM', dropbox_directory=None ):
+def build_dsqQ ( step, nobj=0, source='SBAM', dropbox_directory=None ):
     if dropbox_directory is None:
         dropbox_directory = '../local_data/'
-    if source == 'SBAM':
-        df = catalogs.build_SBAM(dropbox_directory=dropbox_directory)
-    
-    n_objects = df.shape[0]
+    if n_objects==0:
+        import catalogs
+        if source == 'SBAM':
+            df = catalogs.build_SBAM(dropbox_directory=dropbox_directory)
+        n_objects = df.shape[0]
     
     with open('./dsq_fitlines.txt', 'w') as f:
         for start_index in range(0, n_objects, step):
