@@ -5,7 +5,7 @@ def build_dsqQ ( step, source='SBAM', dropbox_directory=None ):
     if dropbox_directory is None:
         dropbox_directory = '../local_data/'
     if source == 'SBAM':
-        df = catalogs.build_SBAM()
+        df = catalogs.build_SBAM(dropbox_directory=dropbox_directory)
     
     n_objects = df.shape[0]
     
