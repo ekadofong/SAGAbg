@@ -93,7 +93,12 @@ def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
         if verbose:
             print(f'beginning {name}')        
             start = time.time ()
-        do_work ( row, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir )
+        try:
+            do_work ( row, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir )
+        except Exception as e:
+            print(f'{name} failed: {e}')
+            continue
+        
         if verbose:
             elapsed = time.time () - start
             overall = time.time () - fulltime
