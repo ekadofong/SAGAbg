@@ -56,7 +56,7 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
     continuum_init = np.median(flux[wmask&~cmask])
     if ltype=='emission':        
         if amplitude_init is None:
-            amplitude_init = flux[cmask].max() #- continuum_init
+            amplitude_init = flux[cmask].max() 
         
         if add_continuum:
             model_continuum = modeling.models.Box1D ( amplitude = continuum_init, x_0=line_wl*(1.+z), 

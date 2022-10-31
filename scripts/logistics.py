@@ -41,7 +41,6 @@ def download_gamaspec ( urlname, specid ):
         f.write( response.content )   
     return filename
  
-
 def load_gamaspec ( gamaspec ):
     ''' 
     Convert GAMA FITS file to a spectrum.

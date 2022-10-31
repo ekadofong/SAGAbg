@@ -33,6 +33,14 @@ def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users
     clean.add_index('wordid')
     return clean
 
+def build_SBAM (*args, **kwargs):
+    '''
+    Load the SAGA Background AAT MMT sample
+    '''
+    clean = build_saga_catalog ( *args, **kwargs ).to_pandas ()
+    subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
+    return subset
+
 def estimate_stellarmass (clean, distmod=None):
     kcorrect = calc_kcor.calc_kcor
     if distmod is None:

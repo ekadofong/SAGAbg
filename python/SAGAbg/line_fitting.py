@@ -25,7 +25,7 @@ def establish_tie ( this_model, tied_attribute ):
 
 
 
-def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True ):
+def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True, wv_cutoff=8000. ):
     '''
     A more generalized line model that includes all of lines described at top.
     Each line gets its own continuum, so we'll see how the fits go.
@@ -47,7 +47,8 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     model_list = []
     parameter_indices = []
     for linename in line_wavelengths.keys():
-        # \\ sort out continuum
+        if (line_wavelengths[linename]*(1.+z)) > wv_cutoff:
+            continue
         if linename not in CONTINUUM_TAGS:
             add_continuum = False
         else:
