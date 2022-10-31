@@ -112,5 +112,5 @@ if __name__ == '__main__':
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=0, help='ending index')
     args = parser.parse_args ()
-    #print (args)
-    main ( args['dropbox_directory'], nfig=args['nfig'], start=int(args['start']), end=int(args['end']), )
+    print(args.nfig)
+    main ( args.dropbox_directory, nfig=args.nfig, start=int(args.start), end=int(args.end), )
