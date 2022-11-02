@@ -56,9 +56,8 @@ def QAviz (wv, flux, model_fit, z):
     inlines, _ = line_fitting.get_lineblocs ( wv, z=z )
     for axidx, (key, val) in enumerate(line_fitting.line_wavelengths.items()):
         ax = f_axarr[axidx]
-        inbloc = abs(wv - (val*(1.+z))) < (100./2.*(1.+z))
+        inbloc = abs(wv - (val*(1.+z))) < (90./2.*(1.+z))
         
-
         ax.plot(wv[inbloc],flux[inbloc], color='k' )
         #fm = np.nanmean(flux[inbloc&~inlines])
         #fs = np.nanstd(flux[inbloc&~inlines])
@@ -66,7 +65,9 @@ def QAviz (wv, flux, model_fit, z):
         #ax.axhline ( fm, color='b'  )
         #ax.axhspan ( fm-fs, fm+fs, color='b' , alpha=0.1 )
         #ax.scatter(wv[inbloc],calibrated_spectrum[inbloc], color='k', s=3 )
-        ax.plot(wv[inbloc], model_fit(wv)[inbloc], color='r', ls='-')
+        mfit = model_fit(wv)
+        hasmodel = mfit > 1.
+        ax.plot(wv[inbloc&hasmodel], mfit[inbloc&hasmodel], color='r', ls='--')
         ax.text ( 0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left')
         ax.axvline ( val*(1.+z), color='pink', zorder=0)
 
@@ -81,7 +82,7 @@ def QAviz (wv, flux, model_fit, z):
 
 def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
     parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
-    parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
+    #parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
     
     if end == -1:
         step = (parent.shape[0] - start) // nfig
