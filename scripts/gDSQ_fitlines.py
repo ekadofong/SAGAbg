@@ -7,6 +7,10 @@ def build_dsqQ ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
         import catalogs
         if source == 'SBAM':
             df = catalogs.build_SBAM(dropbox_directory=dropbox_directory)
+        elif source == 'SBAMsats':
+            df = catalogs.build_SBAM(dropbox_directory=dropbox_directory)
+            df = df.query('p_sat_corrected==1')
+            
         n_objects = df.shape[0]
     
     with open('./dsq_fitlines.txt', 'w') as f:
