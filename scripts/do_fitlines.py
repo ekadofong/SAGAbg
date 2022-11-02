@@ -11,7 +11,7 @@ import catalogs, logistics
 tdict = logistics.load_filters ()
 
 def do_work ( catrow, makefig=False, savefig=True, dropbox_dir=None, 
-                savedir=None, clobber=False, verbose=False, savefit=True):
+                savedir=None, clobber=False, verbose=False, savefit=True, npull=50):
     if savedir is None:
         savedir = '../local_data/SBAM/line_measurements'
     if dropbox_dir is None:
@@ -33,7 +33,7 @@ def do_work ( catrow, makefig=False, savefig=True, dropbox_dir=None,
     wv = wv[mask]
     calibrated_spectrum = calibrated_spectrum[mask]    
     
-    fitdata, fitinfo = line_fitting.fit ( wv, calibrated_spectrum, z=z, npull=10, add_absorption=True )
+    fitdata, fitinfo = line_fitting.fit ( wv, calibrated_spectrum, z=z, npull=npull, add_absorption=True )
     emission_df, continuum_df, global_params = fitdata
     model_fit, indices = fitinfo    
 
@@ -60,11 +60,11 @@ def QAviz (wv, flux, model_fit, z):
         
 
         ax.plot(wv[inbloc],flux[inbloc], color='k' )
-        fm = np.nanmean(flux[inbloc&~inlines])
-        fs = np.nanstd(flux[inbloc&~inlines])
-        print(fm,fs)
-        ax.axhline ( fm, color='b'  )
-        ax.axhspan ( fm-fs, fm+fs, color='b' , alpha=0.1 )
+        #fm = np.nanmean(flux[inbloc&~inlines])
+        #fs = np.nanstd(flux[inbloc&~inlines])
+        ##print(fm,fs)
+        #ax.axhline ( fm, color='b'  )
+        #ax.axhspan ( fm-fs, fm+fs, color='b' , alpha=0.1 )
         #ax.scatter(wv[inbloc],calibrated_spectrum[inbloc], color='k', s=3 )
         ax.plot(wv[inbloc], model_fit(wv)[inbloc], color='r', ls='-')
         ax.text ( 0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left')
@@ -81,6 +81,7 @@ def QAviz (wv, flux, model_fit, z):
 
 def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
     parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+    parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
     
     if end == -1:
         step = (parent.shape[0] - start) // nfig

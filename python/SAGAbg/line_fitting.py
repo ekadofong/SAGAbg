@@ -132,21 +132,25 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     fitter = fitting.LevMarLSQFitter ()    
     model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
     #return model_fit, indices
-    # \\ let's also estimate the uncertainty in the line fluxes    
-    u_flux_arr = np.zeros([npull, Nlines])
-    u_fc_arr = np.zeros([npull, len(CONTINUUM_TAGS)])
-    u_global_arr = np.zeros([npull, 3])
-    
+    # \\ let's also estimate the uncertainty in the line fluxes      
     emission_indices = strings.where_substring(indices, 'emission')
     continuum_indices = strings.where_substring(indices, 'continuum')
+
+    n_flines = len(emission_indices)
+    flines = [ indices[idx].replace('emission','') for idx in emission_indices ]
+    
+    u_flux_arr = np.zeros([npull, n_flines])
+    u_fc_arr = np.zeros([npull, len(CONTINUUM_TAGS)])
+    u_global_arr = np.zeros([npull, 3])    
     #absorption_indices = strings.where_substring(indices, 'absorption')
 
     for pull in range(npull):
         # \\ repull from non-line local areas of the spectrum
-        frandom = np.zeros_like(wave)
+        frandom = flux.copy ()
         for continuum_tag in CONTINUUM_TAGS:
             line_bloc, window_bloc = get_lineblocs ( wave, z=z, lines=line_wavelengths[continuum_tag] )
-            frandom[window_bloc] = np.random.choice ( flux[window_bloc&~line_bloc], size=window_bloc.sum(), replace=True)
+            fs = np.nanstd ( flux[window_bloc&~line_bloc])
+            frandom[window_bloc] += np.random.normal ( 0., fs, window_bloc.sum())            
         #\\ refit                
         random_fit = fitter ( this_model, wave[in_window], frandom[in_window] )
         
@@ -154,8 +158,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
         for index,ei in enumerate(emission_indices):
             u_flux_arr[pull,index] = compute_lineflux ( getattr(random_fit, 'amplitude_%i'%ei), getattr(random_fit, 'stddev_%i'%ei) )
        
-        for index,ci in enumerate(continuum_indices):  
-                      
+        for index,ci in enumerate(continuum_indices):           
             u_fc_arr[pull, index] = getattr ( random_fit, 'amplitude_%i' % ci ).value
             
         u_global_arr[pull, 0] = random_fit.stddev_0.value
@@ -171,14 +174,16 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
         
         
     #elapsed = time.time() - start
-    emission_df = pd.DataFrame ( index=line_wavelengths.keys(), columns=['flux', 'u_flux'] )
+    emission_df = pd.DataFrame ( index=flines, columns=['flux', 'u_flux'] )
     global_params = pd.DataFrame ( index=['sigma_em', 'sigma_abs', 'EW_abs'], columns=['val','u_val'] )
     continuum_df = pd.DataFrame ( index=CONTINUUM_TAGS, columns=['fc','u_fc'] )
-    
+    #print(indices)
+    #print(line_wavelengths.keys())
     for ei in emission_indices:
         lineflux = compute_lineflux ( getattr(model_fit, 'amplitude_%i'%ei), getattr(model_fit, 'stddev_%i'%ei) ) 
         #\\ x 10^-17 erg / s / cm^2
         emission_df.loc[indices[ei].strip('emission'),'flux'] = lineflux
+    
     emission_df['u_flux'] = np.nanstd(u_flux_arr,axis=0)
     
     for ci in continuum_indices:
