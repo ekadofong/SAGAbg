@@ -127,7 +127,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
                                            add_absorption=add_absorption)
     #pmodel = models.Polynomial1D(2, c0=np.median(flux), c1=0., c2=0. )
     #this_model = this_model + pmodel 
-    _, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
+    in_lines, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
     
     fitter = fitting.LevMarLSQFitter ()    
     model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
@@ -140,7 +140,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     emission_indices = strings.where_substring(indices, 'emission')
     continuum_indices = strings.where_substring(indices, 'continuum')
     #absorption_indices = strings.where_substring(indices, 'absorption')
-    
+
     for pull in range(npull):
         # \\ repull from non-line local areas of the spectrum
         frandom = np.zeros_like(wave)
@@ -154,13 +154,21 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
         for index,ei in enumerate(emission_indices):
             u_flux_arr[pull,index] = compute_lineflux ( getattr(random_fit, 'amplitude_%i'%ei), getattr(random_fit, 'stddev_%i'%ei) )
        
-        for index,ci in enumerate(continuum_indices):            
+        for index,ci in enumerate(continuum_indices):  
+                      
             u_fc_arr[pull, index] = getattr ( random_fit, 'amplitude_%i' % ci ).value
             
         u_global_arr[pull, 0] = random_fit.stddev_0.value
         u_global_arr[pull, 1] = random_fit.stddev_2.value
         if add_absorption:
             u_global_arr[pull, 2] = random_fit.EW_2.value
+
+    # \\ a better way (?) to estimate uncertainties
+    # for idx in range(Nlines):
+    #     # \\ get window for each linel, excluding where there are lines
+    #     inbloc = abs(wave - (line_rf*(1.+z))) < (window_width/2.)        
+    #     fs = np.nanstd(flux[inbloc&~in_lines])
+        
         
     #elapsed = time.time() - start
     emission_df = pd.DataFrame ( index=line_wavelengths.keys(), columns=['flux', 'u_flux'] )
