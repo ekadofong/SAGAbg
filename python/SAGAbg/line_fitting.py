@@ -18,9 +18,11 @@ fitting = modeling.fitting
 c_angpers = co.c.to(u.AA/u.s).value
 gAB_nu = (3631.*u.Jy).to(u.erg/u.s/u.cm**2/u.Hz).value
 
-def establish_tie ( this_model, tied_attribute ):
-    def tie ( this_model ):
-        return getattr ( this_model, tied_attribute )
+def establish_tie ( this_model, tied_attribute, fn=None ):
+    if fn is None:
+        fn = lambda x: x
+    def tie ( this_model ):        
+        return fn(getattr ( this_model, tied_attribute ))
     return tie
 
 
@@ -95,9 +97,11 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
         for sname in absorption_stddevs[1:]:
             getattr(model_init, sname).tied = tie_abstd
         
-        # \\ all absorption equivalent widths are constrained to be the same
+        # \\ Hbeta,Hgamma,Hdelta absorption equivalent widths are constrained to be the same
+        # \\ Halpha EW = 0.6 other Balmer lines based on Fig 8 of Gonzalez Delgado+2005
         absorption_ews = [ 'EW_%i'%i for i in absorption_indices ]
-        tie_abew = establish_tie ( model_init, absorption_ews[0] )
+        print ([ parameter_indices[x] for x in absorption_indices ])
+        tie_abew = establish_tie ( model_init, absorption_ews[0], fn=lambda x: x/0.6 )
         for sname in absorption_ews[1:]:
             getattr(model_init, sname).tied = tie_abew
             
@@ -194,7 +198,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     global_params.loc['sigma_em', 'val'] = model_fit.stddev_0.value
     global_params.loc['sigma_abs', 'val'] = model_fit.stddev_2.value
     if add_absorption:
-        global_params.loc['EW_abs', 'val'] = model_fit.EW_2.value
+        global_params.loc['EW_absHa', 'val'] = model_fit.EW_2.value
     
     ug = np.nanstd(u_global_arr, axis=0)
     global_params.loc['sigma_em', 'u_val'] = ug[0]
