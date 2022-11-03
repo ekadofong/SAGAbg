@@ -204,7 +204,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     global_params.loc['sigma_em', 'u_val'] = ug[0]
     global_params.loc['sigma_abs', 'u_val'] = ug[1]
     if add_absorption:
-        global_params.loc['EW_abs', 'u_val'] = ug[2]   
+        global_params.loc['EW_absHa', 'u_val'] = ug[2]   
     
     return (emission_df, continuum_df, global_params), (model_fit, indices)
     
