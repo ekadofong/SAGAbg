@@ -101,11 +101,11 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=
             plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
             plt.close ()
     if savefit:    
-        np.savetxt(fchain, f'{savedir}/{wid}/{wid}-chain.txt')
+        np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain)
     return sampler
     
     
-def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
+def main (dropbox_dir,*args, start=0, end=0, nfig=10, verbose=True, savedir=None, **kwargs):
     parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
     #parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
     
@@ -127,7 +127,7 @@ def main (dropbox_dir, start=0, end=0, nfig=10, verbose=True, savedir=None):
             print(f'beginning {name}')        
             start = time.time ()
         try:
-            do_work ( row, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir )
+            do_work ( row, *args, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir, **kwargs )
         except Exception as e:
             print(f'{name} failed: {e}')
             continue
