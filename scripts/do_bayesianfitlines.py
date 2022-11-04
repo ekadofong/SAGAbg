@@ -1,7 +1,7 @@
 import argparse
 import time
 import os
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 #import pandas as pd
@@ -17,12 +17,7 @@ import logistics, catalogs
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 tdict = logistics.load_filters ()
 
-def do_run (  wave, flux, z,
-              nwalkers=64, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=False, multiprocess=True ):    
-    cl = models.CoordinatedLines (z=z)    
-    u_flux = cl.construct_specflux_uncertainties ( wave, flux )
-    
+def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std, nwalkers ):
     # \\ initialize walkers
     ainit = np.zeros(cl.n_emission)
     balmer_lr = dict(zip(['Hbeta','Hgamma','Hdelta'],[2.86, 6.11,11.06]))
@@ -33,37 +28,48 @@ def do_run (  wave, flux, z,
         elif key in oiii_lr.keys():
             ainit[idx] = ainit[list(cl.emission_lines.keys()).index("[OIII]5007")] / (oiii_lr[key]*1.25)
         else:
-            inline,_=line_fitting.get_lineblocs(wave,z=z, lines=cl.emission_lines[key])
+            inline,_=line_fitting.get_lineblocs(wave,z=cl.z, lines=cl.emission_lines[key])
             ainit[idx] = np.nanmax(flux[inline])
         
     cinit = np.zeros(cl.n_continuum)
     for idx,key in enumerate(cl.continuum_windows.keys()):
-        _,inbloc=line_fitting.get_lineblocs(wave,z=z, lines=cl.continuum_windows[key])
+        _,inbloc=line_fitting.get_lineblocs(wave,z=cl.z, lines=cl.continuum_windows[key])
         cinit[idx] = np.nanmedian(flux[inbloc])
-        
-    p0 = np.concatenate([ainit, cinit, np.array([0.01, EW_init, stddev_em_init, stddev_abs_init])])
+    
+    winit = np.random.uniform ( -0.1, 0.1, ainit.size )
+    p0 = np.concatenate([ainit, winit, cinit, np.array([EW_init, stddev_em_init, stddev_abs_init])])
     p0 = p0[np.newaxis,:]
     p_init = np.random.normal(p0, p0_std*abs(p0), [nwalkers, p0.size])
-    ndim = p_init.shape[1]  
+     
+    return p_init
+
+def do_run (  wave, flux, z,
+              nwalkers=80, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
+              progress=False, multiprocess=True ):    
+    cl = models.CoordinatedLines (z=z)    
+    u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+    
+    p_init = setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std, nwalkers )
+    ndim = p_init.shape[1] 
     
     # \\ run MCMC
     in_windows = u_flux>0.
     espec = models.EmceeSpec ( cl, wave[in_windows], flux[in_windows], u_flux[in_windows] )
 
-    
     if multiprocess:
+        #ncpu = cpu_count ()        
         with Pool () as pool:
             sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, pool=pool )
             sampler.run_mcmc(p_init, nsteps, progress=progress)    
     else:
         sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, )
         sampler.run_mcmc(p_init, nsteps, progress=progress)    
-    return cl, sampler
+    return sampler, (cl, espec, p_init)
 
-def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3 ):
+def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
     fig, axarr = plt.subplots(4,4,figsize=(3+fsize*1.5*4, fsize*3))
     f_axarr = axarr.flatten()
-    for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], 100 )):
+    for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], npull )):
         cl.set_arguments ( fchain[pull] )
         for ax,key in zip(f_axarr, cl.emission_lines.keys()):
             _,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
@@ -71,13 +77,15 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3 ):
                 ax.errorbar(wave[inbloc], flux[inbloc],color='k',fmt='o', yerr=u_flux[inbloc],zorder=0, markersize=5 )
                 ax.text (0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left' )                
 
-            fmodel = cl.evaluate(wave[inbloc])
-            ax.plot(wave[inbloc][fmodel>0.1], cl.evaluate_no_emission(wave[inbloc])[fmodel>0.1], color='b', ls='-', alpha=0.05)
-            ax.plot(wave[inbloc][fmodel>0.1], fmodel[fmodel>0.1], color='r', ls='-', alpha=0.05)
+            #fmask = inbloc #cl.evaluate(wave[inbloc]) > 0.1
+            ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05)
+            ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05)
+            ax.axvline ( wave[inbloc].min(), color='lightgrey', zorder=0)
+            ax.axvline ( wave[inbloc].max(), color='lightgrey', zorder=0)
     return fig, axarr
                 
 
-def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=1000,
+def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=10000, nsave=5000,
              savefit=True, savefig=True, clobber=False, verbose=True, **kwargs ):
     if savedir is None:
         savedir = '../local_data/SBAM/bayfit'    
@@ -89,14 +97,15 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=
         if verbose:
             print(f'{wid} already run. Skipping...')
         return None, None
+    
     if not os.path.exists ( f'{savedir}/{wid}/' ):
         os.makedirs(f'{savedir}/{wid}/')
         
     z = row['SPEC_Z']
     wave, flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )         
-    cl, sampler = do_run ( wave, flux, z, *args, **kwargs)
+    sampler, (cl, espec, p_init) = do_run ( wave, flux, z, *args, nsteps=nsteps, **kwargs)
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
-    fchain = sampler.get_chain (flat=True, discard=discard )
+    fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
 
     if makefig:         
         qaviz(wave, flux, u_flux, fchain, cl )
@@ -104,7 +113,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=
             plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
             plt.close ()
     if savefit:    
-        np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain)
+        np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
     return sampler
     
     
@@ -160,5 +169,5 @@ if __name__ == '__main__':
     parser.add_argument ( '--end', '-E', action='store', default=0, help='ending index')
     args = parser.parse_args ()
 
-    main ( args.dropbox_directory, nfig=args.nfig, start=int(args.start), end=int(args.end), source=args.source,
+    main ( args.dropbox_directory, nfig=int(args.nfig), start=int(args.start), end=int(args.end), source=args.source,
            clobber=args.clobber )

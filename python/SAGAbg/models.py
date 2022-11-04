@@ -22,7 +22,6 @@ def get_lineblocs ( wave, z=0., lines=None, window_width=None, line_width=None )
         lines = np.asarray(list(line_wavelengths.values()))
     elif isinstance(lines, float):
         lines = np.asarray([lines])
-        
 
     lines = lines*(1. + z)
     
@@ -142,7 +141,7 @@ class CoordinatedLines ( object ):
     
     @property
     def narguments ( self ):
-        return 2*len(self.emission_lines) + 1 + len(self.continuum_windows) + 2
+        return 2*len(self.emission_lines) + len(self.continuum_windows) + 2
     
     def get_line_index ( self, line, type='emission'):
         if type == 'emission':
@@ -155,37 +154,31 @@ class CoordinatedLines ( object ):
         
     def set_arguments ( self, args ):
         Nemitters = len(self.emission_lines)
-        self.amplitudes = dict(zip(self.emission_lines.keys(), args[:Nemitters]))    
+        self.amplitudes = dict(zip(self.emission_lines.keys(), args[:Nemitters]))   
+        self.wiggle = dict(zip(self.emission_lines.keys(), args[Nemitters:(2*Nemitters)])) 
         Ncwindows = len(self.continuum_windows)
-        self.continuum_specflux = dict(zip(self.continuum_windows.keys(), args[Nemitters:(Nemitters+Ncwindows)]))
-        self.wiggle = args[-4]
+        self.continuum_specflux = dict(zip(self.continuum_windows.keys(), args[(2*Nemitters):(2*Nemitters+Ncwindows)]))
+        #self.wiggle = args[-4]
         self.EW_abs = args[-3]
         self.stddev_em = args[-2]
         self.stddev_abs = args[-1]
                 
     def evaluate (self, xs):
         A = self.amplitudes
-        EW = self.EW_abs
-        fc = self.continuum_specflux
+        #EW = self.EW_abs
+        #fc = self.continuum_specflux
         wiggle = self.wiggle
         stddev_em = self.stddev_em
-        stddev_abs = self.stddev_abs
+        #stddev_abs = self.stddev_abs
         z = self.z
         
         value = np.zeros_like(xs, dtype=float)
         # \\ add emission components
-        for emission_key in self.emission_lines:            
-            value += gaussian (xs, A[emission_key], self.emission_lines[emission_key]*(1.+z) + wiggle, stddev_em )
-
-        for absorption_key in self.absorption_lines:
-            value += gaussian_ew (xs, EW*self.ew_ratio[absorption_key], fc[absorption_key], 
-                                  self.absorption_lines[absorption_key]*(1.+z) + wiggle, stddev_abs)
-            
-        for continuum_key in self.continuum_windows:            
-            wl_offset = self.continuum_windows[continuum_key]*(1.+z) + wiggle
-            window = abs(xs - wl_offset) <= (self.window_width*(1.+z)/2.)
-            value += window * fc[continuum_key]
-        return value
+        for emission_key in self.emission_lines:               
+            value += gaussian (xs, A[emission_key], (self.emission_lines[emission_key] + wiggle[emission_key])*(1.+z), stddev_em )
+        nonemcomponents = self.evaluate_no_emission ( xs )
+        
+        return value + nonemcomponents
     
     def evaluate_no_emission ( self, xs ):        
         EW = self.EW_abs
@@ -197,11 +190,12 @@ class CoordinatedLines ( object ):
         value = np.zeros_like(xs, dtype=float)
         for absorption_key in self.absorption_lines:
             value += gaussian_ew (xs, EW*self.ew_ratio[absorption_key], fc[absorption_key], 
-                                  self.absorption_lines[absorption_key]*(1.+z) + wiggle, 
+                                  (self.absorption_lines[absorption_key] + wiggle[absorption_key])*(1.+z), 
                                   stddev_abs)
             
-        for continuum_key in self.continuum_windows:            
-            window = abs(xs - (self.continuum_windows[continuum_key]*(1.+z))) <= (self.window_width*(1.+z)/2.)
+        for continuum_key in self.continuum_windows:   
+            wl_offset = (self.continuum_windows[continuum_key] + wiggle[continuum_key])*(1.+z)         
+            window = abs(xs - wl_offset) <= (self.window_width*(1.+z)/2.)
             value += window * fc[continuum_key]
         return value        
     
@@ -227,7 +221,7 @@ class EmceeSpec ( object ):
     def _values_to_arr ( self, x ):
         return np.asarray(list(x.values()))
 
-    def physratio_logprior ( self, lr, bound, k=30, b=0.925 ):
+    def physratio_logprior ( self, lr, bound, k=30, b=0.925):#k=30, b=0.925 ):
         if lr >= bound:
             return 1.
         elif lr < bound:
@@ -238,8 +232,6 @@ class EmceeSpec ( object ):
         if (self._values_to_arr(self.model.amplitudes) < 0.).any():
             self.pcode = 1
             return -np.inf
-        elif abs(self.model.wiggle) > 2.:
-            return -np.inf
         elif (self._values_to_arr(self.model.continuum_specflux) < 0.).any():
             self.pcode = 3
             return -np.inf
@@ -249,42 +241,25 @@ class EmceeSpec ( object ):
         elif self.model.EW_abs > 0.:
             self.pcode = 2
             return -np.inf
-        elif self.model.stddev_em <= 2.:
+        elif self.model.stddev_em <= 1.:
             self.pcode = 4
             return -np.inf
-        elif self.model.stddev_abs <= 2.:
+        elif self.model.stddev_abs <= 1.:
             self.pcode = 4
             return -np.inf
-                
-        
+            
+        # \\ Gaussian prior on line wiggle    
+        lp = sum(gaussian(self._values_to_arr(self.model.wiggle), 1., 0., 0.3))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
-        #err = self.lineratio_eps  
-        lp = np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731'], 0.45 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3726'], 0.38 ))   
-                         
-        #if (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta']) < (2.86 - err):
-        #    self.pcode = 5
-        #    return -np.inf
-        #elif (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma']) < (6.11 - err):
-        #    self.pcode = 6
-        #    return -np.inf
-        #elif (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta']) < (11.06 - err):
-        #    self.pcode = 7
-        #    return -np.inf
-        #elif (self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959']) < (2.98-err):
-        #    self.pcode = 8
-        #    return -np.inf
-        #elif (self.model.amplitudes['[OIII]4363'] / self.model.amplitudes['[OIII]5007']) > (0.16+err):
-        #    self.pcode = 8
-        #    return -np.inf        
-        #elif (self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731']) <  (1.35-err):
-        #    self.pcode = 9
-        #    return -np.inf
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6716'], 0.67 ))        
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3726'], 0.38 ))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3726']/self.model.amplitudes['[OII]3729'], 0.64 ))                           
         
         self.pcode = 0
         return lp
