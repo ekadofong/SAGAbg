@@ -249,7 +249,7 @@ class EmceeSpec ( object ):
             return -np.inf
             
         # \\ Gaussian prior on line wiggle    
-        lp = sum(gaussian(self._values_to_arr(self.model.wiggle), 1., 0., 0.3))
+        lp = sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), 1., 0., 0.3)))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
