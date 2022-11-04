@@ -26,8 +26,7 @@ def establish_tie ( this_model, tied_attribute, fn=None ):
     return tie
 
 
-
-def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True, wv_cutoff=8000. ):
+def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add_absorption=True, wv_cutoff=8000., tie=False ):
     '''
     A more generalized line model that includes all of lines described at top.
     Each line gets its own continuum, so we'll see how the fits go.
@@ -78,7 +77,9 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     model_init = model_list[0]
     for ix in range(1, len(model_list)):
         model_init = model_init + model_list[ix]
-     
+    
+    if not tie:
+        return model_init, parameter_indices
     #####   
     # \\ START tying parameters together
     #####  
@@ -88,6 +89,9 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
     tie_emstd = establish_tie ( model_init, emission_stddevs[0] )
     for sname in emission_stddevs[1:]:
         getattr(model_init, sname).tied = tie_emstd
+    
+    #balmer_indices = [ strings.where_substring ( parameter_indices, 'H' )]
+    #relation = np.array([2.86, 1., 0.47, 0.26])
     
     if add_absorption:
         # \\ all absorption linewidths are constrained to be the same
@@ -100,7 +104,7 @@ def build_ovlmodel ( wave, flux, z=None, line_width=None, window_width=None, add
         # \\ Hbeta,Hgamma,Hdelta absorption equivalent widths are constrained to be the same
         # \\ Halpha EW = 0.6 other Balmer lines based on Fig 8 of Gonzalez Delgado+2005
         absorption_ews = [ 'EW_%i'%i for i in absorption_indices ]
-        print ([ parameter_indices[x] for x in absorption_indices ])
+        
         tie_abew = establish_tie ( model_init, absorption_ews[0], fn=lambda x: x/0.6 )
         for sname in absorption_ews[1:]:
             getattr(model_init, sname).tied = tie_abew
@@ -133,7 +137,7 @@ def fit ( wave, flux, z=0., npull = 100, add_absorption=True ):
     #this_model = this_model + pmodel 
     in_lines, in_window = get_lineblocs ( wave, z, window_width=window_width, line_width=line_width )
     
-    fitter = fitting.LevMarLSQFitter ()    
+    fitter = fitting.SLSQPLSQFitter ()    
     model_fit = fitter ( this_model, wave[in_window], flux[in_window] )
     #return model_fit, indices
     # \\ let's also estimate the uncertainty in the line fluxes      
