@@ -1,8 +1,8 @@
 # \\ computed from PyNeb with 
 # \\ vac-to-air conversions from specutils.utils
 balmer_wavelengths = {'Halpha':6563.,'Hbeta':4862., 'Hgamma':4340., 'Hdelta':4101. }
-OIII_wavelengths = {'[OIII]4959': 4958.83507790285,
-                    '[OIII]5007': 5006.766373938368,
+OIII_wavelengths = {'[OIII]5007': 5006.766373938368,
+                    '[OIII]4959': 4958.83507790285,                    
                     '[OIII]4363': 4363.142139776673}
 OII_wavelengths = {}#'[OII]3729': 3728.756593589433, '[OII]3726': 3725.974257426484}
 NII_wavelengths = {'[NII]6548': 6547.952750702898,
