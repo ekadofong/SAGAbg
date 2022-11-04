@@ -1,6 +1,7 @@
 import argparse
 import time
 import os
+from multiprocessing import Pool
 import numpy as np
 import matplotlib.pyplot as plt
 #import pandas as pd
@@ -18,7 +19,7 @@ tdict = logistics.load_filters ()
 
 def do_run (  wave, flux, z,
               nwalkers=64, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=False):    
+              progress=False, multiprocess=True ):    
     cl = models.CoordinatedLines (z=z)    
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     
@@ -49,11 +50,14 @@ def do_run (  wave, flux, z,
     in_windows = u_flux>0.
     espec = models.EmceeSpec ( cl, wave[in_windows], flux[in_windows], u_flux[in_windows] )
 
-    sampler = emcee.EnsembleSampler(
-        nwalkers, ndim, espec.log_prob, 
-    )
-
-    sampler.run_mcmc(p_init, nsteps, progress=progress)    
+    
+    if multiprocess:
+        with Pool () as pool:
+            sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, pool=pool )
+            sampler.run_mcmc(p_init, nsteps, progress=progress)    
+    else:
+        sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, )
+        sampler.run_mcmc(p_init, nsteps, progress=progress)    
     return cl, sampler
 
 def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3 ):

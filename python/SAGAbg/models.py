@@ -265,7 +265,8 @@ class EmceeSpec ( object ):
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731'], 0.45 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3726'], 0.38 ))                    
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3726'], 0.38 ))   
+                         
         #if (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta']) < (2.86 - err):
         #    self.pcode = 5
         #    return -np.inf
