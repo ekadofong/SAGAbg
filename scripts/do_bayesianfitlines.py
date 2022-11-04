@@ -75,7 +75,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3 ):
                 
 
 def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=1000,
-             savefit=True, savefig=False, clobber=True, verbose=True, **kwargs ):
+             savefit=True, savefig=True, clobber=False, verbose=True, **kwargs ):
     if savedir is None:
         savedir = '../local_data/SBAM/bayfit'    
     if dropbox_dir is None:
@@ -105,9 +105,12 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, discard=
     return sampler
     
     
-def main (dropbox_dir,*args, start=0, end=0, nfig=10, verbose=True, savedir=None, **kwargs):
-    parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
-    #parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
+def main (dropbox_dir,*args, start=0, end=0, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
+    if source == 'SBAM':
+        parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+    elif source == 'SBAMsat':
+        parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+        parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
     
     if end == -1:
         step = (parent.shape[0] - start) // nfig
@@ -145,6 +148,8 @@ if __name__ == '__main__':
     parser.add_argument ( '--nfig', '-n', action='store', default=10, help='number of QA figures to generate' )
     parser.add_argument ( '--savedir', '-s', action='store', default='../local_data/SBAM/line_measurements',
                          help='path to output directory')
+    parser.add_argument ( '--source', action='store', default='SBAM', )
+    parser.add_argument ( '--clobber', action='store_true')
     #now = datetime.datetime.now()
     #parser.add_argument ( '--logfile', '-l', action='store', 
     #                     default=f'run_{now.year}{now.month:02d}{now.day:02d}.log' )
@@ -152,4 +157,5 @@ if __name__ == '__main__':
     parser.add_argument ( '--end', '-E', action='store', default=0, help='ending index')
     args = parser.parse_args ()
 
-    main ( args.dropbox_directory, nfig=args.nfig, start=int(args.start), end=int(args.end), )
+    main ( args.dropbox_directory, nfig=args.nfig, start=int(args.start), end=int(args.end), source=args.source,
+           clobber=args.clobber )
