@@ -5,13 +5,14 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+from ekfparse import strings
 from SAGAbg import line_fitting
 import catalogs, logistics
 
 tdict = logistics.load_filters ()
 
 def do_work ( catrow, makefig=False, savefig=True, dropbox_dir=None, 
-                savedir=None, clobber=False, verbose=False, savefit=True, npull=50):
+                savedir=None, clobber=False, verbose=False, savefit=True, npull=50, add_absorption=True):
     if savedir is None:
         savedir = '../local_data/SBAM/line_measurements'
     if dropbox_dir is None:
@@ -33,12 +34,12 @@ def do_work ( catrow, makefig=False, savefig=True, dropbox_dir=None,
     wv = wv[mask]
     calibrated_spectrum = calibrated_spectrum[mask]    
     
-    fitdata, fitinfo = line_fitting.fit ( wv, calibrated_spectrum, z=z, npull=npull, add_absorption=True )
+    fitdata, fitinfo = line_fitting.fit ( wv, calibrated_spectrum, z=z, npull=npull, add_absorption=add_absorption )
     emission_df, continuum_df, global_params = fitdata
     model_fit, indices = fitinfo    
 
     if makefig: 
-        QAviz(wv, calibrated_spectrum, model_fit, z )
+        QAviz(wv, calibrated_spectrum, model_fit, indices, z )
         if savefig:
             plt.savefig( f'{savedir}/{wid}/qa_lines.png' )
             plt.close ()
@@ -50,10 +51,16 @@ def do_work ( catrow, makefig=False, savefig=True, dropbox_dir=None,
     
     return fitdata, fitinfo
   
-def QAviz (wv, flux, model_fit, z):
+def QAviz (wv, flux, model_fit, indices, z):
     fig, axarr = plt.subplots(3,4, figsize=(4*4,3*3))
     f_axarr = axarr.flatten()
     inlines, _ = line_fitting.get_lineblocs ( wv, z=z )
+    # \\ also show abs model
+    abs_only = model_fit.copy ()
+    emission_indices = strings.where_substring ( indices, 'emission' )
+    for ei in emission_indices:
+        setattr(abs_only, 'amplitude_%i' % ei, 0.)
+    
     for axidx, (key, val) in enumerate(line_fitting.line_wavelengths.items()):
         ax = f_axarr[axidx]
         inbloc = abs(wv - (val*(1.+z))) < (90./2.*(1.+z))
@@ -68,6 +75,7 @@ def QAviz (wv, flux, model_fit, z):
         mfit = model_fit(wv)
         hasmodel = mfit > 1.
         ax.plot(wv[inbloc&hasmodel], mfit[inbloc&hasmodel], color='r', ls='--')
+        ax.plot(wv[inbloc&hasmodel], abs_only(wv[inbloc&hasmodel]), color='b', ls=':')
         ax.text ( 0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left')
         ax.axvline ( val*(1.+z), color='pink', zorder=0)
 

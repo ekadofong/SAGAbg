@@ -1,6 +1,13 @@
 import numpy as np
 from astropy import modeling 
+from SAGAbg import line_db
 from .line_db import *
+
+def gaussian ( x, A, m, s):
+    return A * np.exp ( -(x-m)**2 / (2.*s**2) )
+
+def gaussian_ew ( x, EW, fc, m, s):
+    return EW*fc*(s*np.sqrt(2.*np.pi))**-1 * np.exp ( -(x-m)**2/(2.*s**2) )
 
 def get_lineblocs ( wave, z=0., lines=None, window_width=None, line_width=None ):
     '''
@@ -83,6 +90,7 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
         amplitude_init = -1. * continuum_init * 0.25
         ew_init = amplitude_init * np.sqrt(2.*np.pi) * stddev_init / continuum_init
         
+        
         lmodel = construct_absorbermodel()( mean = line_wl*(1.+z), fc=continuum_init, stddev=stddev_init, 
                                             EW = ew_init )                
         lmodel.EW.bounds = (-10., 0.)
@@ -90,3 +98,207 @@ def define_linemodel ( wave, flux, line_wl, z=0., ltype='emission', linewidth=No
         lmodel.mean.bounds = (line_wl*(1.+z) - line_wiggle, line_wl*(1.+z) + line_wiggle)
    
     return lmodel
+
+# \\\ EMCEE IMPLEMENTATION OF FITTING
+
+def get_linefluxes ( fchain, n_lines ):
+    fluxes = fchain[:,:n_lines] * np.sqrt(2.*np.pi) * fchain[:,-2].reshape(-1,1)
+    return fluxes
+
+def get_equivalentwidths ( fchain, cl ):
+    fluxes = get_linefluxes ( fchain, cl.n_emission )
+    fc =  fchain[:,cl.n_emission:(cl.n_emission+cl.n_continuum)]
+    
+
+class CoordinatedLines ( object ):
+    def __init__ ( self, emission_lines=None, absorption_lines=None, continuum_windows=None, z=0., window_width=140 ):
+        if emission_lines is None:
+            emission_lines = line_db.line_wavelengths
+        if absorption_lines is None:
+            absorption_lines = dict(zip(line_db.BALMER_ABSORPTION, 
+                                    [line_db.line_wavelengths[x] for x in line_db.BALMER_ABSORPTION]))
+        if continuum_windows is None:
+            continuum_windows = dict(zip(line_db.CONTINUUM_TAGS, 
+                                    [line_db.line_wavelengths[x] for x in line_db.CONTINUUM_TAGS]))
+        
+        self.emission_lines = emission_lines
+        self.absorption_lines = absorption_lines
+        self.continuum_windows = continuum_windows
+        self.ew_ratio = {'Halpha':0.5, 'Hbeta':1., 'Hgamma':1., 'Hdelta':1.}
+        self.z = z
+        self.window_width = window_width
+    
+    @property
+    def n_emission ( self ):
+        return len(self.emission_lines)
+    
+    @property
+    def n_absorption ( self ): 
+        return len(self.absorption_lines)
+    
+    @property 
+    def n_continuum ( self ):
+        return len(self.continuum_windows)
+    
+    @property
+    def narguments ( self ):
+        return 2*len(self.emission_lines) + 1 + len(self.continuum_windows) + 2
+    
+    def get_line_index ( self, line, type='emission'):
+        if type == 'emission':
+            tag = 'emission_lines'
+        elif type == 'absorption':
+            tag = 'absoprtion_lines'
+        elif type == 'continuum':
+            tag = 'continuum_windows'
+        return list(getattr(self, tag).keys()).index(line)
+        
+    def set_arguments ( self, args ):
+        Nemitters = len(self.emission_lines)
+        self.amplitudes = dict(zip(self.emission_lines.keys(), args[:Nemitters]))    
+        Ncwindows = len(self.continuum_windows)
+        self.continuum_specflux = dict(zip(self.continuum_windows.keys(), args[Nemitters:(Nemitters+Ncwindows)]))
+        self.wiggle = args[-4]
+        self.EW_abs = args[-3]
+        self.stddev_em = args[-2]
+        self.stddev_abs = args[-1]
+                
+    def evaluate (self, xs):
+        A = self.amplitudes
+        EW = self.EW_abs
+        fc = self.continuum_specflux
+        wiggle = self.wiggle
+        stddev_em = self.stddev_em
+        stddev_abs = self.stddev_abs
+        z = self.z
+        
+        value = np.zeros_like(xs, dtype=float)
+        # \\ add emission components
+        for emission_key in self.emission_lines:            
+            value += gaussian (xs, A[emission_key], self.emission_lines[emission_key]*(1.+z) + wiggle, stddev_em )
+
+        for absorption_key in self.absorption_lines:
+            value += gaussian_ew (xs, EW*self.ew_ratio[absorption_key], fc[absorption_key], 
+                                  self.absorption_lines[absorption_key]*(1.+z) + wiggle, stddev_abs)
+            
+        for continuum_key in self.continuum_windows:            
+            wl_offset = self.continuum_windows[continuum_key]*(1.+z) + wiggle
+            window = abs(xs - wl_offset) <= (self.window_width*(1.+z)/2.)
+            value += window * fc[continuum_key]
+        return value
+    
+    def evaluate_no_emission ( self, xs ):        
+        EW = self.EW_abs
+        fc = self.continuum_specflux        
+        stddev_abs = self.stddev_abs
+        z = self.z
+        wiggle = self.wiggle
+        
+        value = np.zeros_like(xs, dtype=float)
+        for absorption_key in self.absorption_lines:
+            value += gaussian_ew (xs, EW*self.ew_ratio[absorption_key], fc[absorption_key], 
+                                  self.absorption_lines[absorption_key]*(1.+z) + wiggle, 
+                                  stddev_abs)
+            
+        for continuum_key in self.continuum_windows:            
+            window = abs(xs - (self.continuum_windows[continuum_key]*(1.+z))) <= (self.window_width*(1.+z)/2.)
+            value += window * fc[continuum_key]
+        return value        
+    
+    def construct_specflux_uncertainties ( self, wave, flux ):
+        u_flux = np.zeros_like(flux)
+        for continuum_tag in self.continuum_windows.keys():
+            line_bloc, window_bloc = get_lineblocs ( wave, z=self.z, lines=self.continuum_windows[continuum_tag] )
+            fs = np.nanstd ( flux[window_bloc&~line_bloc])
+            u_flux[window_bloc] = fs
+            #frandom[window_bloc] += np.random.normal ( 0., fs, window_bloc.sum())    
+        return u_flux
+    
+
+class EmceeSpec ( object ):
+    def __init__ ( self, model, wave, flux, u_flux, lineratio_eps=0.5 ):
+        self.model = model
+        self.wave = wave
+        self.flux = flux
+        self.u_flux = u_flux
+        self.lineratio_eps = lineratio_eps
+        self.pcode = 0
+        
+    def _values_to_arr ( self, x ):
+        return np.asarray(list(x.values()))
+
+    def physratio_logprior ( self, lr, bound, k=30, b=0.925 ):
+        if lr >= bound:
+            return 1.
+        elif lr < bound:
+            return ( 1. + np.exp(-k*(lr - bound*b)))**-1
+
+    def log_prior ( self ):
+        # \\ common-sense bounds
+        if (self._values_to_arr(self.model.amplitudes) < 0.).any():
+            self.pcode = 1
+            return -np.inf
+        elif abs(self.model.wiggle) > 2.:
+            return -np.inf
+        elif (self._values_to_arr(self.model.continuum_specflux) < 0.).any():
+            self.pcode = 3
+            return -np.inf
+        elif self.model.EW_abs < -10:
+            self.pcode = 2
+            return -np.inf
+        elif self.model.EW_abs > 0.:
+            self.pcode = 2
+            return -np.inf
+        elif self.model.stddev_em <= 2.:
+            self.pcode = 4
+            return -np.inf
+        elif self.model.stddev_abs <= 2.:
+            self.pcode = 4
+            return -np.inf
+                
+        
+        # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
+        #err = self.lineratio_eps  
+        lp = np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731'], 0.45 ))
+                    
+        #if (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta']) < (2.86 - err):
+        #    self.pcode = 5
+        #    return -np.inf
+        #elif (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma']) < (6.11 - err):
+        #    self.pcode = 6
+        #    return -np.inf
+        #elif (self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta']) < (11.06 - err):
+        #    self.pcode = 7
+        #    return -np.inf
+        #elif (self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959']) < (2.98-err):
+        #    self.pcode = 8
+        #    return -np.inf
+        #elif (self.model.amplitudes['[OIII]4363'] / self.model.amplitudes['[OIII]5007']) > (0.16+err):
+        #    self.pcode = 8
+        #    return -np.inf        
+        #elif (self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731']) <  (1.35-err):
+        #    self.pcode = 9
+        #    return -np.inf
+        
+        self.pcode = 0
+        return lp
+
+    def log_likelihood ( self ):
+        # \\ Gaussian likelihood        
+        residsq = (self.model.evaluate ( self.wave )  -  self.flux)**2
+        
+        inner = -0.5*np.sum(residsq / self.u_flux**2 + np.log(2.*np.pi*self.u_flux**2) )    
+        return inner
+
+    def log_prob ( self, args ):
+        self.model.set_arguments(args)
+        lprior = self.log_prior ( )
+        if not np.isfinite(lprior):
+            return -np.inf
+        
+        return lprior + self.log_likelihood ( )
