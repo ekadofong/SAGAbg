@@ -57,11 +57,10 @@ def do_run (  wave, flux, z,
     return cl, sampler
 
 def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3 ):
-    fig, axarr = plt.subplots(3,4,figsize=(3+fsize*1.5*4, fsize*3))
+    fig, axarr = plt.subplots(4,4,figsize=(3+fsize*1.5*4, fsize*3))
     f_axarr = axarr.flatten()
     for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], 100 )):
         cl.set_arguments ( fchain[pull] )
-
         for ax,key in zip(f_axarr, cl.emission_lines.keys()):
             _,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
             if idx==0: 
