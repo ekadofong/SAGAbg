@@ -45,7 +45,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
 
 def do_run (  wave, flux, z,
               nwalkers=80, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=False, multiprocess=True ):    
+              progress=False, multiprocess=False ):    
     cl = models.CoordinatedLines (z=z)    
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     
