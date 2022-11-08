@@ -3,6 +3,10 @@ from astropy import modeling
 from SAGAbg import line_db
 from .line_db import *
 
+def produce_gaussianfn ( A, m, s):
+    fn = lambda x: gaussian(x, A,m,s)
+    return fn
+
 def gaussian ( x, A, m, s):
     return A * np.exp ( -(x-m)**2 / (2.*s**2) )
 
@@ -210,7 +214,7 @@ class CoordinatedLines ( object ):
     
 
 class EmceeSpec ( object ):
-    def __init__ ( self, model, wave, flux, u_flux, lineratio_eps=0.5 ):
+    def __init__ ( self, model, wave=None, flux=None, u_flux=None, lineratio_eps=0.5 ):
         self.model = model
         self.wave = wave
         self.flux = flux
@@ -218,10 +222,22 @@ class EmceeSpec ( object ):
         self.lineratio_eps = lineratio_eps
         self.pcode = 0
         
+    def load_posterior ( self, fname, ):
+        fchain = np.loadtxt ( fname )#f'../local_data/SBAM/bayfit/{wid}/{wid}-chain.txt' )
+        self.psample = fchain
+        self.obs_fluxes = get_linefluxes ( fchain, self.model.n_emission )
+        
     def _values_to_arr ( self, x ):
         return np.asarray(list(x.values()))
 
     def physratio_logprior ( self, lr, bound, k=30, b=0.925):#k=30, b=0.925 ):
+        '''
+        A logistic function which penalizes line ratios below the physical bound. In order
+        for this to make sense, the redder line must be in the numerator (such that 
+        reddening increases the observed line ratio over the intrinsic emissivity ratio.) This
+        can be neglected in the case where the lines are sufficiently close together in
+        wavelength space.
+        '''
         if lr >= bound:
             return 1.
         elif lr < bound:
@@ -249,17 +265,24 @@ class EmceeSpec ( object ):
             return -np.inf
             
         # \\ Gaussian prior on line wiggle    
-        lp = sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), 1., 0., 0.3)))
+        lp = sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * 0.3)**-1, 0., 0.3)))
+        nii_doublet = 2.9421684623736297
+        nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
+        lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * 0.1*nii_doublet)**-1, nii_doublet,  0.1*nii_doublet ))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
         lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6716'] / self.model.amplitudes['[SII]6731'], 0.45 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6716'], 0.67 ))        
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3726'], 0.38 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3726']/self.model.amplitudes['[OII]3729'], 0.64 ))                           
+        
+        # \\ for the SII and OII doublets, make a constraint on both sides
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
+               
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
+        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
+              
         
         self.pcode = 0
         return lp
