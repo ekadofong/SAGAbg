@@ -17,7 +17,7 @@ def build_dsqQ ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
         for start_index in range(0, n_objects, step):
             end_index = min ( start_index + step, n_objects )
             #print(start_index, end_index )
-            print ( "python do_fitlines.py -S %i -E %i -d %s" % (start_index, end_index, dropbox_directory), file=f)
+            print ( "python do_bayesianfitlines.py -S %i -E %i -d %s --source SBAMsat --nfig 100" % (start_index, end_index, dropbox_directory), file=f)
         
         
 if __name__ == '__main__':
