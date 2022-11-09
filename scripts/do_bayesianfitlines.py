@@ -8,13 +8,13 @@ import matplotlib.pyplot as plt
 #import pandas as pd
 import emcee
 #from astropy import units as u
-
 #from ekfparse import strings
 from SAGAbg import line_fitting, models
 from astropy import cosmology
 
 import logistics, catalogs
 
+os.environ["OMP_NUM_THREADS"] = "1"
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 tdict = logistics.load_filters ()
 
