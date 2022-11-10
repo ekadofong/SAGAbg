@@ -172,8 +172,8 @@ if __name__ == '__main__':
     #                     default=f'run_{now.year}{now.month:02d}{now.day:02d}.log' )
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
-    parser.add_argument ( '--mpi', actions='store_true' )
+    parser.add_argument ( '--singleton', action='store_true' )
     args = parser.parse_args ()
 
     main ( args.dropbox_directory, nfig=int(args.nfig), start=int(args.start), end=int(args.end), source=args.source,
-           clobber=args.clobber, multiprocess=args.mpi )
+           clobber=args.clobber, multiprocess=~args.singleton )
