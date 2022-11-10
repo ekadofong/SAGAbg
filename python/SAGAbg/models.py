@@ -147,6 +147,13 @@ class CoordinatedLines ( object ):
     def narguments ( self ):
         return 2*len(self.emission_lines) + len(self.continuum_windows) + 2
     
+    @property
+    def linenames ( self ):
+        return self.emission_lines.keys()
+
+    def has_line ( self, line ):
+        return line in self.linenames
+    
     def get_line_index ( self, line, type='emission'):
         if type == 'emission':
             tag = 'emission_lines'
@@ -270,18 +277,29 @@ class EmceeSpec ( object ):
         nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
         lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * 0.1*nii_doublet)**-1, nii_doublet,  0.1*nii_doublet ))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
+        
+        if self.model.has_line('Halpha'):
+            if self.model.has_line('Hbeta'):
+                lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
+            if self.model.has_line('Hgamma'):
+                lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
+            if self.model.has_line('Hdelta'):
+                lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06 ))
+                
+        if self.model.has_line('[OIII]5007'):
+            if self.model.has_line('[OIII]4959'):
+                lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
+            if self.model.has_line('[OIII]4363'):
+                lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
         
         # \\ for the SII and OII doublets, make a constraint on both sides
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
-               
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
-        lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
+        if self.model.has_line('[SII]6717') and self.model.has_line('[SII]6731'):
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
+            
+        if self.model.has_line('[OII]3727') and self.model.has_line('[OII]3729'):
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
               
         
         self.pcode = 0

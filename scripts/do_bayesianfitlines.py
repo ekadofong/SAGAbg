@@ -32,6 +32,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
         else:
             inline,_=line_fitting.get_lineblocs(wave,z=cl.z, lines=cl.emission_lines[key])
             ainit[idx] = np.nanmax(flux[inline])
+
         
     cinit = np.zeros(cl.n_continuum)
     for idx,key in enumerate(cl.continuum_windows.keys()):
@@ -47,8 +48,30 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
 
 def do_run (  wave, flux, z,
               nwalkers=80, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=True, multiprocess=True ):    
-    cl = models.CoordinatedLines (z=z)    
+              progress=True, multiprocess=True ):   
+    
+    # \\ only include lines that are actually covered by the spectrum
+    wvmin = wave.min()
+    wvmax = wave.max()
+    elines = {}
+    for key in line_fitting.line_wavelengths:
+        obswl = ((1.+z)*line_fitting.line_wavelengths[key])
+        if obswl < wvmin:
+            continue
+        elif obswl > wvmax:
+            continue
+        elines[key] = line_fitting.line_wavelengths[key]
+    # \\ propagate to absorption emission
+    alines = {}
+    clines = {}
+    for key in line_fitting.BALMER_ABSORPTION:
+        if key in elines.keys():
+            alines[key] = elines[key]
+    for key in line_fitting.CONTINUUM_TAGS:
+        if key in elines.keys():
+            clines[key] = elines[key]    
+        
+    cl = models.CoordinatedLines (z=z, emission_lines=elines, absorption_lines=alines, continuum_windows=clines)    
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     
     p_init = setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std, nwalkers )
@@ -172,8 +195,8 @@ if __name__ == '__main__':
     #                     default=f'run_{now.year}{now.month:02d}{now.day:02d}.log' )
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
-    parser.add_argument ( '--singleton', action='store_true' )
+    parser.add_argument ( '--serial', action='store_true' )
     args = parser.parse_args ()
-
+    
     main ( args.dropbox_directory, nfig=int(args.nfig), start=int(args.start), end=int(args.end), source=args.source,
-           clobber=args.clobber, multiprocess=~args.singleton )
+           clobber=args.clobber, multiprocess=not args.serial ) 
