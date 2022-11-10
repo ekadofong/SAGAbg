@@ -1,6 +1,7 @@
 import argparse
 import time
 import os
+import sys
 #from multiprocessing import Pool, cpu_count
 from schwimmbad import MPIPool
 import numpy as np
@@ -60,6 +61,10 @@ def do_run (  wave, flux, z,
     if multiprocess:
         #ncpu = cpu_count ()        
         with MPIPool () as pool:
+            if not pool.is_master():
+                pool.wait()
+                sys.exit(0)            
+                
             sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, pool=pool )
             sampler.run_mcmc(p_init, nsteps, progress=progress)    
     else:
