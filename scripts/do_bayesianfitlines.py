@@ -122,7 +122,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
     return sampler
     
     
-def main (dropbox_dir,*args, start=0, end=0, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
+def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
     elif source == 'SBAMsat':
