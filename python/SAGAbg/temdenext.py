@@ -143,12 +143,24 @@ class LineArray (object):
             lrobs = espec.obs_fluxes[:,idx0]/espec.obs_fluxes[:,idx1]
             self.gkde.append(gaussian_kde ( lrobs ))   
             self.domain.append((lrobs.min(), min(100,lrobs.max())))
+        
+    def temperature_zones ( self, lineratio_tuple, temperature ):
+        lowt = ['[NII]','[SII]','[OII]']
+        hight= ['[OIII]']
+        species = lineratio_tuple[2].strip('0123456789')
+        if species in lowt:
+            return 0.7 * temperature + 3000.
+        elif species in hight:
+            return temperature
+        else:
+            return temperature
             
     def predict ( self, args ):
-        #T,ne,Av = args
+        T,ne,Av = args
         prediction = np.zeros ( self.n_ratios, dtype=float )
         for idx,lr in enumerate(self.rl_objects):
-            prediction[idx] = lr.predict ( *args )
+            temperature = self.temperature_zones(self.line_ratios[idx], T)
+            prediction[idx] = lr.predict ( temperature, ne, Av )
         return prediction
     
     def log_prior ( self, args ):
@@ -165,7 +177,11 @@ class LineArray (object):
             return -np.inf
         
         lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * 0.5)**-1, 2, .5 ))
-        self.pcode = 0
+        
+        if not np.isfinite(lp):
+            self.pcode = 3
+        else:             
+            self.pcode = 0
         return lp
     
     def log_likelihood ( self, args ):
