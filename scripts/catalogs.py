@@ -41,6 +41,8 @@ def build_SBAM (*args, **kwargs):
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
     return subset
 
+
+
 def estimate_stellarmass (clean, distmod=None):
     kcorrect = calc_kcor.calc_kcor
     if distmod is None:

@@ -74,7 +74,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
             cumulative_abundance_estimates[species][ix] = emissivity_ratio * intensity_ratio
     return cumulative_abundance_estimates
 
-def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500):
+def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     '''
     Run inference
     '''
@@ -91,7 +91,7 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500):
     ndim = p0.shape[1] 
     
     sampler = emcee.EnsembleSampler( nwalkers, ndim, la.log_prob, )
-    out = sampler.run_mcmc( p0, nsteps, progress=True )
+    out = sampler.run_mcmc( p0, nsteps, progress=progress )
     #kwargs = {'flat':True,'discard':100}
     fchain = sampler.get_chain ( flat=True, discard=discard )  
     
@@ -106,7 +106,7 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500):
     return la, sampler
 
 
-def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, multiprocess=False, verbose=True, **kwargs):
+def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
     '''
     Infer Te, ne, and Av of the galaxy spectrum
     based off of MCMC-inferred line ratios
@@ -117,8 +117,8 @@ def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, multiprocess=
         parent = catalogs.build_SBAM ().query('p_sat_corrected==1')
         
     # \\ identify objects with line ratio measurements
-    run = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*txt') % inputdir]
-    parent = parent.reindex(run)
+    run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*chain.txt' % inputdir)]    
+    parent = parent.reindex(run_names)
     if end == -1:
         end = None
         
@@ -129,9 +129,11 @@ def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, multiprocess=
             start = time.time ()
         try:
             lr_filename = f'{inputdir}/{name}/{name}-chain.txt'
+            if os.path.exists(lr_filename.replace('chain','abundances')) and not clobber:
+                continue
             z = parent.loc[name, 'SPEC_Z']
             run (lr_filename, z, **kwargs )
-        except Exception as e:
+        except KeyboardInterrupt as e:
             print(f'{name} failed: {e}')
             continue
         
@@ -144,18 +146,16 @@ def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, multiprocess=
 
 if __name__ == '__main__':    
     parser = argparse.ArgumentParser ( prog='do_temdenext.py', description='ISM physical conditions inference')
-    parser.add_argument ( '--input', '-i', action='store', default='../local_data/bayfit/',
+    parser.add_argument ( '--input', '-i', action='store', default='../local_data/SBAM/bayfit/',
                           help='path to directory with SAGA spectra')
-    parser.add_argument ( '--savedir', '-s', action='store', default='../local_data/SBAM/bayfit/',
-                         help='path to output directory')
     parser.add_argument ( '--source', action='store', default='SBAM', )
     parser.add_argument ( '--clobber', action='store_true')
 
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
     
-    parser.add_argument ( '--mpi', action='store_true' )
+    #parser.add_argument ( '--mpi', action='store_true' )
     args = parser.parse_args ()
     
-    main ( args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source,
-           clobber=args.clobber, multiprocess=args.mpi ) 
+    main ( args.input, start=int(args.start), end=int(args.end), source=args.source,
+           clobber=args.clobber,)# multiprocess=args.mpi ) 
