@@ -106,15 +106,15 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     return la, sampler
 
 
-def main (inputdir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
+def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
     '''
     Infer Te, ne, and Av of the galaxy spectrum
     based off of MCMC-inferred line ratios
     '''
     if source == 'SBAM':
-        parent = catalogs.build_SBAM ()
+        parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
     elif source == 'SBAMsat':
-        parent = catalogs.build_SBAM ().query('p_sat_corrected==1')
+        parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir).query('p_sat_corrected==1')
         
     # \\ identify objects with line ratio measurements
     run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*chain.txt' % inputdir)]    
@@ -153,9 +153,10 @@ if __name__ == '__main__':
 
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
-    
+    parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
+                          help='path to directory with SAGA spectra')
     #parser.add_argument ( '--mpi', action='store_true' )
     args = parser.parse_args ()
     
-    main ( args.input, start=int(args.start), end=int(args.end), source=args.source,
+    main ( args.input, args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source,
            clobber=args.clobber,)# multiprocess=args.mpi ) 
