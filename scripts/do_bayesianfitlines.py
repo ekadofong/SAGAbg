@@ -47,7 +47,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
     return p_init
 
 def do_run (  wave, flux, z,
-              nwalkers=80, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
+              nwalkers=100, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
               progress=True, multiprocess=True ):   
     
     # \\ only include lines that are actually covered by the spectrum
@@ -142,7 +142,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
             plt.close ()
     if savefit:    
         np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
-    return sampler
+    return sampler,  (cl, espec, p_init)
     
     
 def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
