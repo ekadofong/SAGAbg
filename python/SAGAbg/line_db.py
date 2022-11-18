@@ -17,9 +17,9 @@ line_ratios = [("H", 1, 'Halpha', 'Hbeta'),
                ("H", 1, 'Halpha', 'Hgamma'),
                ('S', 2, '[SII]6717', '[SII]6731'), 
                ('N',2, '[NII]5755', '[NII]6548'),              
-               ('O',2,'[OII]7320', '[OII]3727'),
+               #('O',2,'[OII]7320', '[OII]3727'),
                #('O',2,'[OII]7320', '[OII]3729'),
-               ('O',2,'[OII]7330', '[OII]3727'),
+               #('O',2,'[OII]7330', '[OII]3727'),
                ('O',3,'[OIII]4363', '[OIII]5007')]
 
 line_lists = [balmer_wavelengths, OIII_wavelengths, OII_wavelengths, SII_wavelengths, NII_wavelengths, FeX]
