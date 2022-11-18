@@ -55,12 +55,12 @@ def do_run (  wave, flux, z,
     wvmax = wave.max()
     elines = {}
     for key in line_fitting.line_wavelengths:
-        obswl = ((1.+z)*line_fitting.line_wavelengths[key])
+        obswl = ((1.+z)*np.mean(line_fitting.line_wavelengths[key])) # \\ use mean wl for unresolved multiples
         if obswl < wvmin:
             continue
         elif obswl > wvmax:
             continue
-        elines[key] = line_fitting.line_wavelengths[key]
+        elines[key] = np.mean(line_fitting.line_wavelengths[key])
     # \\ propagate to absorption emission
     alines = {}
     clines = {}
@@ -171,7 +171,7 @@ def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=Non
             start = time.time ()
         try:
             do_work ( row, *args, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir, **kwargs )
-        except Exception as e:
+        except KeyboardInterrupt as e:
             print(f'{name} failed: {e}')
             continue
         
