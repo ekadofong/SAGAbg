@@ -157,18 +157,19 @@ class CoordinatedLines ( object ):
     def get_line_index ( self, line, type='emission'):
         if type == 'emission':
             tag = 'emission_lines'
-        elif type == 'absorption':
-            tag = 'absoprtion_lines'
+            start = 0
+        #elif type == 'absorption':
+        #    tag = 'absoprtion_lines'            
         elif type == 'continuum':
             tag = 'continuum_windows'
-        return list(getattr(self, tag).keys()).index(line)
+            start = 2*self.n_emission
+        return list(getattr(self, tag).keys()).index(line) + start
         
-    def set_arguments ( self, args ):
-        Nemitters = len(self.emission_lines)
-        self.amplitudes = dict(zip(self.emission_lines.keys(), args[:Nemitters]))   
-        self.wiggle = dict(zip(self.emission_lines.keys(), args[Nemitters:(2*Nemitters)])) 
+    def set_arguments ( self, args ):        
+        self.amplitudes = dict(zip(self.emission_lines.keys(), args[:self.n_emission]))   
+        self.wiggle = dict(zip(self.emission_lines.keys(), args[self.n_emission:(2*self.n_emission)])) 
         Ncwindows = len(self.continuum_windows)
-        self.continuum_specflux = dict(zip(self.continuum_windows.keys(), args[(2*Nemitters):(2*Nemitters+Ncwindows)]))
+        self.continuum_specflux = dict(zip(self.continuum_windows.keys(), args[(2*self.n_emission):(2*self.n_emission+Ncwindows)]))
         #self.wiggle = args[-4]
         self.EW_abs = args[-3]
         self.stddev_em = args[-2]

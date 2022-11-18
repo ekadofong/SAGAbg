@@ -94,7 +94,7 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     out = sampler.run_mcmc( p0, nsteps, progress=progress )
     #kwargs = {'flat':True,'discard':100}
     fchain = sampler.get_chain ( flat=True, discard=discard )  
-    
+    condition_stats = np.quantile(fchain, [0.025,.16,.5,.84,0.975],axis=0 )
     # \\ save OH or save OII/OIII?  
     abundances = estimate_abundances ( la, fchain )
     oh = np.log10(abundances['[OII]'] + abundances['[OIII]'])+12.
@@ -102,6 +102,7 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     oii = np.nanquantile(abundances['[OII]'], [0.025,.16,.5,.84,0.975]) * 1e5 # abundances X 10^5
     oh_q = np.nanquantile(oh, [0.025,.16,.5,.84,0.975])
     abundances_stats = np.array([oii,oiii,oh_q])
+    np.savetxt ( lr_filename.replace('chain','conditions'), condition_stats ) 
     np.savetxt ( lr_filename.replace('chain','abundances'), abundances_stats )
     return la, sampler
 
