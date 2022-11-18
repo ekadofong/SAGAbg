@@ -48,12 +48,23 @@ class LineRatio ( object ):
             self.atom = pn.RecAtom ( element, ionization )
         else:
             self.atom = pn.Atom ( element, ionization )
+            
         self.wl0 = wl0
         self.wl1 = wl1
 
-        self.transition0 = self.atom.getTransition ( wl0 )
-        self.transition1 = self.atom.getTransition ( wl1 )
-        
+        if isinstance(wl0, float):
+            self.len0 = 1
+            self.transition0 = [ self.atom.getTransition(wl0) ]
+        else:
+            self.len0 = len(wl0)
+            self.transition0 = [ self.atom.getTransition ( x ) for x in wl0 ]
+        if isinstance(wl1, float):
+            self.len1 = 1
+            self.transition1 = [ self.atom.getTransition(wl1) ]
+        else:
+            self.len1 = len(wl1)
+            self.transition1 = [ self.atom.getTransition ( x ) for x in wl1 ]
+                        
         self.Rv = Rv
     
     def introduce_extinction ( self, ebv, extinction_curve = 'calzetti'):
@@ -76,8 +87,10 @@ class LineRatio ( object ):
         Predict what the intrinsic line ratio of the two lines should
         be at a given temperature and density
         '''
-        em0 = self.atom.getEmissivity ( temperature, density, *self.transition0 )
-        em1 = self.atom.getEmissivity ( temperature, density, *self.transition1 )
+        em0 = [ self.atom.getEmissivity ( temperature, density, *self.transition0[idx] ) for idx in range(self.len0) ]
+        em0 = np.sum(em0)
+        em1 = [ self.atom.getEmissivity ( temperature, density, *self.transition1[idx] ) for idx in range(self.len1) ]
+        em1 = np.sum(em1)
         #if np.isnan(em0):
         #    print( f'Undefined emissivity for {self.element}{self.wl0}')            
         #if np.isnan(em1):
