@@ -4,8 +4,9 @@ balmer_wavelengths = {'Halpha':6563.,'Hbeta':4862., 'Hgamma':4340., 'Hdelta':410
 OIII_wavelengths = {'[OIII]5007': 5006.766373938368,
                     '[OIII]4959': 4958.83507790285,                    
                     '[OIII]4363': 4363.142139776673}
-OII_wavelengths = {'[OII]3729': 3728.756593589433, '[OII]3727': 3725.974257426484,
-                   '[OII]7320':7320.0, '[OII]7330':7330.0 }
+OII_wavelengths = {'[OII]3729':[3728.756593589433,3725.974257426484], #, '[OII]3727': 3725.974257426484,
+                   '[OII]7320':[7320.,7318.9], '[OII]7330':[7329.7,7330.7]}
+                   #'[OII]7320':7320.0, '[OII]7319':7318.9, '[OII]7330':7329.7, '[OII]7331':7330.7 }
 NII_wavelengths = {'[NII]6548': 6547.952750702898,
                    '[NII]6583': 6583.354593822465,
                    '[NII]5755': 5754.5071992902085}
@@ -17,9 +18,9 @@ line_ratios = [("H", 1, 'Halpha', 'Hbeta'),
                ("H", 1, 'Halpha', 'Hgamma'),
                ('S', 2, '[SII]6717', '[SII]6731'), 
                ('N',2, '[NII]5755', '[NII]6548'),              
-               #('O',2,'[OII]7320', '[OII]3727'),
+               #('O',2,'[OII]7320', '[OII]3727,[OII]3729'),
                #('O',2,'[OII]7320', '[OII]3729'),
-               #('O',2,'[OII]7330', '[OII]3727'),
+               ('O',2,'[OII]7320,[OII]7330', '[OII]3729'),
                ('O',3,'[OIII]4363', '[OIII]5007')]
 
 line_lists = [balmer_wavelengths, OIII_wavelengths, OII_wavelengths, SII_wavelengths, NII_wavelengths, FeX]
