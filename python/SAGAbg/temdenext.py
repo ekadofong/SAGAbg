@@ -74,8 +74,9 @@ class LineRatio ( object ):
         return 10^(0.4 * E(B-V) * [k0 - k1])
         '''
         if extinction_curve == 'calzetti':
-            k0 = calzetti00 ( self.wl0 )
-            k1 = calzetti00 ( self.wl1 )
+            k0 = calzetti00 ( self.wl0[0] )
+            k1 = calzetti00 ( self.wl1[0] ) # XXX assume that lines used 
+            # \\ for line ratios together are also close in wavelength space.TODO: generalize
         kdiff = k0 - k1
 
         corr = 10.**(0.4*ebv*kdiff)
@@ -103,6 +104,15 @@ class LineRatio ( object ):
         intrinisc_lineratio = self.predict_intrinsicratio ( temperature, density )
         extinction_correction = self.introduce_extinction ( ebv )
         return extinction_correction * intrinisc_lineratio
+
+def index_on_string ( dictionary, indices, sep=',' ):
+    values = []
+    for key in indices.split(sep):
+        cval = dictionary[key]
+        if not isinstance(cval, list):
+            cval = [cval]
+        values.extend(cval)
+    return values
     
 class LineArray (object):
     def __init__ ( self, line_ratios=None ):
@@ -115,8 +125,8 @@ class LineArray (object):
         self.rl_objects = []
         for lratio in self.line_ratios:
             self.rl_objects.append(LineRatio ( lratio[0], lratio[1], 
-                                               line_db.line_wavelengths[lratio[2]],
-                                               line_db.line_wavelengths[lratio[3]]))
+                                               index_on_string(line_db.line_wavelengths,lratio[2]),
+                                               index_on_string(line_db.line_wavelengths,lratio[3])))
 
     def load_litobservations ( self, xs, u_xs, fluxes, ground_key='F(Hbeta)', npull=1000 ):
         '''
@@ -151,9 +161,9 @@ class LineArray (object):
         self.gkde = []
         self.domain = []
         for lrargs in self.line_ratios:
-            idx0 = self.espec.model.get_line_index(lrargs[2])
-            idx1 = self.espec.model.get_line_index(lrargs[3])
-            lrobs = espec.obs_fluxes[:,idx0]/espec.obs_fluxes[:,idx1]
+            idx0 = [ self.espec.model.get_line_index(key) for key in lrargs[2].split(',') ]
+            idx1 = [ self.espec.model.get_line_index(key) for key in lrargs[3].split(',') ]
+            lrobs = espec.obs_fluxes[:,idx0].sum(axis=1)/espec.obs_fluxes[:,idx1].sum(axis=1)
             self.gkde.append(gaussian_kde ( lrobs ))   
             self.domain.append((lrobs.min(), min(100,lrobs.max())))
         
