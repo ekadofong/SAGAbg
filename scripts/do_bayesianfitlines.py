@@ -38,6 +38,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
     for idx,key in enumerate(cl.continuum_windows.keys()):
         _,inbloc=line_fitting.get_lineblocs(wave,z=cl.z, lines=cl.continuum_windows[key])
         cinit[idx] = np.nanmedian(flux[inbloc])
+    cinit[cinit<0.] = 1e-5
     
     winit = np.random.uniform ( -0.1, 0.1, ainit.size )
     p0 = np.concatenate([ainit, winit, cinit, np.array([EW_init, stddev_em_init, stddev_abs_init])])
@@ -48,7 +49,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
 
 def do_run (  wave, flux, z,
               nwalkers=100, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=True, multiprocess=True ):   
+              progress=True, multiprocess=True, filename=None ):   
     
     # \\ only include lines that are actually covered by the spectrum
     wvmin = wave.min()
@@ -81,6 +82,12 @@ def do_run (  wave, flux, z,
     in_windows = u_flux>0.
     espec = models.EmceeSpec ( cl, wave[in_windows], flux[in_windows], u_flux[in_windows] )
 
+    if filename is not None:
+        backend = emcee.backends.HDFBackend ( filename )
+        backend.reset ( nwalkers, ndim )
+    else:
+        backend = None
+        
     if multiprocess:
         #ncpu = cpu_count ()        
         with MPIPool () as pool:
@@ -88,11 +95,11 @@ def do_run (  wave, flux, z,
                 pool.wait()
                 sys.exit(0)            
                 
-            sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, pool=pool )
+            sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, pool=pool, backend=backend )
             sampler.run_mcmc(p_init, nsteps, progress=progress)    
-    else:
-        sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, )
-        sampler.run_mcmc(p_init, nsteps, progress=progress)    
+    else:        
+        sampler = emcee.EnsembleSampler( nwalkers, ndim, espec.log_prob, backend=backend)
+        sampler.run_mcmc(p_init, nsteps, progress=progress)            
     return sampler, (cl, espec, p_init)
 
 def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
@@ -114,7 +121,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
                 
 
 def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=20000, nsave=5000,
-             savefit=True, savefig=True, clobber=False, verbose=True, **kwargs ):
+             savefit=True, savefig=True, clobber=False, verbose=True, save_sampler=False, **kwargs ):
     if savedir is None:
         savedir = '../local_data/SBAM/bayfit'    
     if dropbox_dir is None:
@@ -130,8 +137,12 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
         os.makedirs(f'{savedir}/{wid}/')
         
     z = row['SPEC_Z']
-    wave, flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )         
-    sampler, (cl, espec, p_init) = do_run ( wave, flux, z, *args, nsteps=nsteps, **kwargs)
+    wave, flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
+    if save_sampler:
+        sampler_backend = f'{savedir}/{wid}/{wid}-backend.h5'
+    else:
+        sampler_backend = None
+    sampler, (cl, espec, p_init) = do_run ( wave, flux, z, *args, nsteps=nsteps, filename=sampler_backend, **kwargs)
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
 
@@ -142,6 +153,10 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
             plt.close ()
     if savefit:    
         np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
+        with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
+            for key in cl.emission_lines.keys():
+                print(key, file=f)
+                
     return sampler,  (cl, espec, p_init)
     
     
@@ -186,7 +201,7 @@ if __name__ == '__main__':
     parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
                           help='path to directory with SAGA spectra')
     parser.add_argument ( '--nfig', '-n', action='store', default=10, help='number of QA figures to generate' )
-    parser.add_argument ( '--savedir', '-s', action='store', default='../local_data/SBAM/line_measurements',
+    parser.add_argument ( '--savedir', '-s', action='store', default='../local_data/SBAM/bayfit',
                          help='path to output directory')
     parser.add_argument ( '--source', action='store', default='SBAM', )
     parser.add_argument ( '--clobber', action='store_true')
@@ -196,7 +211,9 @@ if __name__ == '__main__':
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
     parser.add_argument ( '--serial', action='store_true' )
+    parser.add_argument ( '--nsteps', action='store', default=20000 )
     args = parser.parse_args ()
     
     main ( args.dropbox_directory, nfig=int(args.nfig), start=int(args.start), end=int(args.end), source=args.source,
-           clobber=args.clobber, multiprocess=not args.serial ) 
+           savedir=args.savedir,
+           clobber=args.clobber, multiprocess=not args.serial, nsteps=int(args.nsteps) ) 
