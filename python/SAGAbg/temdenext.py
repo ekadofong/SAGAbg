@@ -164,7 +164,10 @@ class LineArray (object):
             idx0 = [ self.espec.model.get_line_index(key) for key in lrargs[2].split(',') ]
             idx1 = [ self.espec.model.get_line_index(key) for key in lrargs[3].split(',') ]
             lrobs = espec.obs_fluxes[:,idx0].sum(axis=1)/espec.obs_fluxes[:,idx1].sum(axis=1)
-            self.gkde.append(gaussian_kde ( lrobs ))   
+            
+            bw = 3.*lrobs.size**(-1./5.)
+            #print(lrargs[0], lrobs.std(), bw)
+            self.gkde.append(gaussian_kde ( lrobs, bw_method=bw ))   
             self.domain.append((lrobs.min(), min(100,lrobs.max())))
         
     def temperature_zones ( self, lineratio_tuple, temperature ):
