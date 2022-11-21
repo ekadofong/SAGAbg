@@ -302,11 +302,12 @@ class EmceeSpec ( object ):
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
             
-        if self.model.has_line('[OII]3727') and self.model.has_line('[OII]3729'):
-            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
-            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
-            doublet_amplitude = self.model.amplitudes['[OII]3727'] + self.model.amplitudes['[OII]3729']
-            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7320']/doublet_amplitude, 0.06))
+        #if self.model.has_line('[OII]3727') and self.model.has_line('[OII]3729'):
+        #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
+        #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
+        #if self.model.has_line('[OII]3729') and self.model.has_line('[OII7320]'):
+        #    doublet_amplitude = self.model.amplitudes['[OII]3729']
+        #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7330']/doublet_amplitude, 0.06))
         
         self.pcode = 0
         return lp
