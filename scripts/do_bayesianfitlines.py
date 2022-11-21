@@ -171,7 +171,7 @@ def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=Non
             start = time.time ()
         try:
             do_work ( row, *args, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir, **kwargs )
-        except KeyboardInterrupt as e:
+        except Exception as e:
             print(f'{name} failed: {e}')
             continue
         
