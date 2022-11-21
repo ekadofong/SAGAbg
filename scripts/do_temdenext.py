@@ -61,13 +61,19 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
             
             line_emissivity = 0.
             flux_corr = np.zeros(la.espec.obs_fluxes.shape[0], dtype=float)
-            for lname in lines:
+            for idx,lname in enumerate(lines):
                 Te = la.temperature_zones ( species, args[0] )
                 ne = args[1]
-                line_emissivity += atom.getEmissivity(Te,ne,
-                                                    *atom.getTransition(la.espec.model.emission_lines[lname]))
+                line = la.espec.model.emission_lines[lname]
+                if isinstance(line, float):
+                    line_emissivity += atom.getEmissivity(Te,ne,
+                                                        *atom.getTransition(line))
+                else:
+                    for wl in line:                
+                        line_emissivity += atom.getEmissivity(Te,ne,
+                                                            *atom.getTransition(wl))
                 lidx = la.espec.model.get_line_index ( lname )
-                flux_corr += temdenext.extinction_correction (la.espec.model.emission_lines[lname], 
+                flux_corr += temdenext.extinction_correction (np.mean(la.espec.model.emission_lines[lname]), 
                                                             la.espec.obs_fluxes[:,lidx], args[-1] ) 
             intensity_ratio = flux_corr / fhb_corr
             emissivity_ratio = hbeta_emissivity / line_emissivity
@@ -134,7 +140,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
                 continue
             z = parent.loc[name, 'SPEC_Z']
             run (lr_filename, z, **kwargs )
-        except KeyboardInterrupt as e:
+        except Exception as e:
             print(f'{name} failed: {e}')
             continue
         
