@@ -259,9 +259,9 @@ class EmceeSpec ( object ):
         elif (self._values_to_arr(self.model.continuum_specflux) < 0.).any():
             self.pcode = 3
             return -np.inf
-        elif self.model.EW_abs < -10:
-            self.pcode = 2
-            return -np.inf
+        #elif self.model.EW_abs < -10:
+        #    self.pcode = 2
+        #    return -np.inf
         elif self.model.EW_abs > 0.:
             self.pcode = 2
             return -np.inf
@@ -271,9 +271,13 @@ class EmceeSpec ( object ):
         elif self.model.stddev_abs <= 1.:
             self.pcode = 4
             return -np.inf
+        
+        # \\ Gaussian prior on abs EW
+        ews = 3.
+        lp = np.log(gaussian(self.model.EW_abs, (np.sqrt(2.*np.pi) * ews)**-1, 0., ews))
             
         # \\ Gaussian prior on line wiggle    
-        lp = sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * 0.3)**-1, 0., 0.3)))
+        lp += sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * 0.3)**-1, 0., 0.3)))
         nii_doublet = 2.9421684623736297
         nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
         lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * 0.1*nii_doublet)**-1, nii_doublet,  0.1*nii_doublet ))
