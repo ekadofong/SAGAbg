@@ -214,6 +214,12 @@ if __name__ == '__main__':
     parser.add_argument ( '--nsteps', action='store', default=20000 )
     args = parser.parse_args ()
     
-    main ( args.dropbox_directory, nfig=int(args.nfig), start=int(args.start), end=int(args.end), source=args.source,
+    main ( args.dropbox_directory, 
+           nfig=int(args.nfig), 
+           start=int(args.start), 
+           end=int(args.end), 
+           source=args.source,
            savedir=args.savedir,
-           clobber=args.clobber, multiprocess=not args.serial, nsteps=int(args.nsteps) ) 
+           clobber=args.clobber, 
+           multiprocess=not args.serial, 
+           nsteps=int(args.nsteps) ) 

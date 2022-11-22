@@ -11,7 +11,10 @@ from SAGAbg import models, temdenext
 
 import catalogs
 
-def setup_run (lineratio_arrays, nwalkers):
+def setup_run (lineratio_arrays, nwalkers, 
+               Tlow=9000., Thigh=20000.,
+               nelow=10., nehigh=1000.,
+               Avlow=0., Avhigh=1. ):
     '''
     Initialize walkers over a uniform distribution of physically
     plausible HII region conditions:
@@ -19,12 +22,21 @@ def setup_run (lineratio_arrays, nwalkers):
     ne = [10, 1000] cc
     Av = [0 1]
     '''
-    pl = [9e3, 1e1, 0.]
-    ph = [2e4, 1e3, 1.]
-    p0 = np.random.uniform(pl, ph, (nwalkers*10, len(pl)))
-    lp = np.array([lineratio_arrays.log_prob(x) for x in p0])
-    p0 = p0[np.isfinite(lp)][:nwalkers]
-    return p0
+    pl = [Tlow, nelow, Avlow]
+    ph = [Thigh, nehigh, Avhigh]
+    pinit = np.zeros([nwalkers, len(pl)])
+    added = 0
+    iters = 0
+    while added < nwalkers:
+        p0 = np.random.uniform(pl, ph, (nwalkers, len(pl)))
+        lp = np.array([lineratio_arrays.log_prob(x) for x in p0])
+        to_add = p0[np.isfinite(lp)][:(nwalkers-added)]
+        pinit[added:(added+to_add.shape[0])] = to_add
+        added += to_add.shape[0]
+        iters += 1
+        if iters > 10:
+            break
+    return pinit
 
 def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     '''
