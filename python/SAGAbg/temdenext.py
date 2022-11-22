@@ -118,6 +118,8 @@ class LineArray (object):
     def __init__ ( self, line_ratios=None ):
         if line_ratios is None:
             self.line_ratios = line_db.line_ratios
+        else:
+            self.line_ratios = line_ratios
         self.n_ratios = len(self.line_ratios)
         self.build ()
         
@@ -191,18 +193,22 @@ class LineArray (object):
     
     def log_prior ( self, args ):
         T,ne,Av = args
+        m_ne = 2. # np.log10(100.)
+        s_ne = 0.1
 
         if (T<9e3) or (T>2e4):
             self.pcode = 0
             return -np.inf
         #elif (ne<1e-4) or (ne>1e4):
         #    self.pcode = 1
-        #    return -np.inf        
+        #    return -np.inf     #   
         elif Av < 0:
             self.pcode = 2
-            return -np.inf
+            return -np.inf 
+        #elif (ne < 50.) or (ne > 200.):
+        #    return -np.inf
         
-        lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * 0.5)**-1, 2, .5 ))
+        lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * s_ne**2)**-1, m_ne, s_ne ))
         
         if not np.isfinite(lp):
             self.pcode = 3
