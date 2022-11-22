@@ -274,13 +274,14 @@ class EmceeSpec ( object ):
         
         # \\ Gaussian prior on abs EW
         ews = 3.
-        lp = np.log(gaussian(self.model.EW_abs, (np.sqrt(2.*np.pi) * ews)**-1, 0., ews))
+        lp = np.log(gaussian(self.model.EW_abs, (np.sqrt(2.*np.pi) * ews**2)**-1, 0., ews))
             
         # \\ Gaussian prior on line wiggle    
-        lp += sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * 0.3)**-1, 0., 0.3)))
+        wiggle_s = 0.3
+        lp += sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * wiggle_s**2)**-1, 0., wiggle_s)))
         nii_doublet = 2.9421684623736297
         nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
-        lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * 0.1*nii_doublet)**-1, nii_doublet,  0.1*nii_doublet ))
+        lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * (0.1*nii_doublet)**2)**-1, nii_doublet,  (0.1*nii_doublet)**2 ))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
         
         if self.model.has_line('Halpha'):
