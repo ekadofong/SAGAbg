@@ -118,7 +118,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
             ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05)
             ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05)
             ax.axvline ( cl.emission_lines[key]*(1.+cl.z), color='grey', ls='--', zorder=0, lw=0.5)
-            ax.set_ylim ( ax.get_ylim()[0],flux[inwindow].max() )
+            ax.set_ylim ( max(0.,ax.get_ylim()[0]),1.2*flux[inwindow].max() )
     return fig, axarr
                 
 
@@ -155,7 +155,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
             plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
             plt.close ()
     if savefit:
-        np.savez_compressed ( f'{savedir}/{wid}/{wid}-bfit.npz', chain_approximation )
+        np.savez_compressed ( f'{savedir}/{wid}/{wid}-bfit.npz', **chain_approximation )
         #np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
         #with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
         #    for key in cl.emission_lines.keys():
@@ -163,21 +163,38 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
                 
     return sampler,  (cl, espec, p_init)
 
+def get_kde_domain (x, npts, covering_factor=1.5):
+    xmin,xmed,xmax = np.quantile(x, [0.,.5,1.])
+    start = xmed - (xmed-xmin)*covering_factor
+    end = xmed + (xmax - xmed)*covering_factor
+    domain = np.linspace(start, end, npts)    
+    return domain
+
 def approximate_kde ( cl, fchain, npts=100, covering_factor=1.5 ):
     '''
     Instead of saving chains, save an approximation of a gaussian kernel density estimate
     '''
     bw = 3.*fchain.shape[0]**(-1./5.)
+    line_fluxes = models.get_linefluxes ( fchain, cl.n_emission )
+    
     chain_args = cl.arguments
     arr_d = {}
-    for idx in range(fchain.shape[1]):        
-        gkde = gaussian_kde ( fchain[:,idx], bw_method=bw )
-        key = chain_args[idx]
-        xmin,xmed,xmax = np.quantile(fchain[:,idx], [0.,.5,1.])
-        start = xmed - (xmed-xmin)*covering_factor
-        end = xmed + (xmax - xmed)*covering_factor
-        domain = np.linspace(start, end,npts)
-        arr_d[key] = np.array([domain,gkde(domain)])
+    for idx in range(fchain.shape[1]):
+        key = chain_args[idx]        
+        if idx < cl.n_emission: # \\ also save line flux PDFs
+            assert 'emission' in key
+            gkde = gaussian_kde ( line_fluxes[:,idx], bw_method=bw )
+            domain = get_kde_domain (line_fluxes[:,idx], npts, covering_factor)
+            #arr_d[key] = np.quantile ( fchain[:,idx], [0.025,0.16,.5,.84,.975] )
+            arr_d[key.replace('emission','flux')] = np.array([domain,gkde(domain)])
+        elif 'wiggle' in key:
+            arr_d[key] = np.quantile ( fchain[:,idx], [0.025,0.16,.5,.84,.975] )
+        else:
+            gkde = gaussian_kde ( fchain[:,idx], bw_method=bw )            
+            domain = get_kde_domain (fchain[:,idx], npts, covering_factor)
+            arr_d[key] = np.array([domain,gkde(domain)])
+                        
+        
     return arr_d
 
         

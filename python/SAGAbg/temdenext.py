@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import gaussian_kde
+from scipy.interpolate import interp1d
 import pyneb as pn
+from ekfstats import sampling
 from . import line_db, models
 
 temperature_zones = {'O3':'Toiii',
@@ -157,7 +159,83 @@ class LineArray (object):
             flux_pulls = np.random.normal(flux, u_flux, npull)
             self.espec.obs_fluxes[:,idx] = flux_pulls
     
-    def load_observations ( self, espec ):
+    # \\ XXX not currently in use, rejection sample line ratios instead of doing it
+    # \\ with math
+    def from_samples_load_observations ( self, espec, nsample=5000 ):
+        self.espec = espec
+        self.gkde = []
+        self.domain = []
+        for lrargs in self.line_ratios:
+            names0 = [ f'flux_{x}' for x in lrargs[2].split(',') ]
+            names1 = [ f'flux_{x}' for x in lrargs[3].split(',') ]
+            
+            numerator_flux = np.zeros(nsample)
+            for name in names0:
+                val = espec.psample[name]
+                sample_n = sampling.rejection_sample_fromarray ( val[0], val[1], nsamp=nsample )
+                numerator_flux += sample_n
+
+            denominator_flux = np.zeros(nsample)
+            for name in names1:
+                val = espec.psample[name]
+                sample_n = sampling.rejection_sample_fromarray ( val[0], val[1], nsamp=nsample )
+                denominator_flux += sample_n
+
+                
+    def load_observations ( self, espec, npts=200 ):
+        '''
+        Estimate probability density functions of line ratios based off of 
+        approximations to 
+        '''
+        self.espec = espec
+        #fn = interp1d(val[0],val[1], bounds_error=False, fill_value=0.)
+        self.gkde   = []
+        self.domain = []
+        for lrargs in self.line_ratios:
+            names0 = [ f'flux_{x}' for x in lrargs[2].split(',') ]
+            names1 = [ f'flux_{x}' for x in lrargs[3].split(',') ]
+            
+            numerator_flux = None
+            numerator_pdf  = None
+            for name in names0:
+                ux,uy = sampling.upsample ( self.espec.psample[name][0], self.espec.psample[name][1] )
+                if numerator_flux is None:
+                    numerator_flux = ux
+                    numerator_pdf  = uy
+                else:
+                    A,B = np.meshgrid ( numerator_flux, ux )
+                    numerator_flux = (A + B).flatten()
+                    pdfA,pdfB = np.meshgrid ( numerator_pdf, uy )
+                    numerator_pdf = (pdfA*pdfB).flatten()
+                    
+            denominator_flux = None
+            denominator_pdf  = None
+            for name in names1:
+                ux, uy = sampling.upsample ( self.espec.psample[name][0], self.espec.psample[name][1] )
+                if denominator_flux is None:
+                    denominator_flux = ux
+                    denominator_pdf  = uy
+                else:
+                    A,B = np.meshgrid ( denominator_flux, ux )
+                    denominator_flux = (A + B).flatten()
+                    pdfA,pdfB = np.meshgrid ( denominator_pdf, uy )
+                    denominator_pdf = (pdfA*pdfB).flatten()     
+                    
+            line_ratio  = sampling.cross_then_flat(numerator_flux, denominator_flux**-1)
+            probdensity = sampling.cross_then_flat(numerator_pdf, denominator_pdf )
+            
+            xmin,xmax   = np.quantile ( line_ratio, [0.,1.] )
+            domain      = np.linspace ( xmin, xmax, npts )   
+            assns       = np.digitize ( line_ratio, domain )            
+            pdf         = np.array([np.sum(probdensity[assns==x]) for x in np.unique(assns)])
+            nrml        = np.trapz(pdf, domain)
+            pdf        /= nrml
+            interpfn = sampling.build_interpfn( domain, pdf )
+            self.gkde.append ( interpfn )
+            self.domain.append((xmin, min(100,xmax)))
+
+    
+    def DEP_load_observations ( self, espec ):
         '''
         Do a Gaussian KDE to do a density estimate of the 
         posterior sample drawn from line fitting
