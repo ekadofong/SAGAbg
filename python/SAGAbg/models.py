@@ -8,6 +8,9 @@ def produce_gaussianfn ( A, m, s):
     return fn
 
 def gaussian ( x, A, m, s):
+    if A == 'normalize':
+        A = np.sqrt(2.*np.pi * s**2)**-1
+    
     return A * np.exp ( -(x-m)**2 / (2.*s**2) )
 
 def gaussian_ew ( x, EW, fc, m, s):
@@ -144,8 +147,8 @@ class CoordinatedLines ( object ):
         return len(self.continuum_windows)
     
     @property
-    def narguments ( self ):
-        return 2*len(self.emission_lines) + len(self.continuum_windows) + 2
+    def n_arguments ( self ):
+        return 2*len(self.emission_lines) + len(self.continuum_windows) + 3
     
     @property
     def linenames ( self ):
@@ -174,7 +177,18 @@ class CoordinatedLines ( object ):
         self.EW_abs = args[-3]
         self.stddev_em = args[-2]
         self.stddev_abs = args[-1]
-                
+    
+    @property
+    def arguments (self):
+        args = []
+        args.extend ( [ f'emission_{x}' for x in self.linenames] )
+        args.extend ( [f'wiggle_{x}' for x in self.linenames]) 
+        args.extend( [f'fc_{x}' for x in self.continuum_windows.keys() ])
+        args.append('EW_abs')
+        args.append('stddev_emission')
+        args.append('stddev_absorption')
+        return args
+    
     def evaluate (self, xs):
         A = self.amplitudes
         #EW = self.EW_abs
@@ -269,7 +283,7 @@ class EmceeSpec ( object ):
             self.pcode = 4
             return -np.inf
         elif self.model.stddev_abs <= 1.:
-            self.pcode = 4
+            self.pcode = 4 
             return -np.inf
         
         # \\ Gaussian prior on abs EW
