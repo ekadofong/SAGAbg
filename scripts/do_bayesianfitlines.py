@@ -3,9 +3,10 @@ import time
 import os
 import sys
 #from multiprocessing import Pool, cpu_count
-from schwimmbad import MPIPool
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
+from schwimmbad import MPIPool
 #import pandas as pd
 import emcee
 #from astropy import units as u
@@ -108,7 +109,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
     for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], npull )):
         cl.set_arguments ( fchain[pull] )
         for ax,key in zip(f_axarr, cl.emission_lines.keys()):
-            _,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
+            inwindow,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
             if idx==0: 
                 ax.errorbar(wave[inbloc], flux[inbloc],color='k',fmt='o', yerr=u_flux[inbloc],zorder=0, markersize=5 )
                 ax.text (0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left' )                
@@ -117,6 +118,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
             ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05)
             ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05)
             ax.axvline ( cl.emission_lines[key]*(1.+cl.z), color='grey', ls='--', zorder=0, lw=0.5)
+            ax.set_ylim ( ax.get_ylim()[0],flux[inwindow].max() )
     return fig, axarr
                 
 
@@ -145,20 +147,40 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
     sampler, (cl, espec, p_init) = do_run ( wave, flux, z, *args, nsteps=nsteps, filename=sampler_backend, **kwargs)
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
-
+    chain_approximation = approximate_kde ( cl, fchain )
+    
     if makefig:         
         qaviz(wave, flux, u_flux, fchain, cl )
         if savefig:
             plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
             plt.close ()
-    if savefit:    
-        np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
-        with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
-            for key in cl.emission_lines.keys():
-                print(key, file=f)
+    if savefit:
+        np.savez_compressed ( f'{savedir}/{wid}/{wid}-bfit.npz', chain_approximation )
+        #np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
+        #with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
+        #    for key in cl.emission_lines.keys():
+        #        print(key, file=f)
                 
     return sampler,  (cl, espec, p_init)
-    
+
+def approximate_kde ( cl, fchain, npts=100, covering_factor=1.5 ):
+    '''
+    Instead of saving chains, save an approximation of a gaussian kernel density estimate
+    '''
+    bw = 3.*fchain.shape[0]**(-1./5.)
+    chain_args = cl.arguments
+    arr_d = {}
+    for idx in range(fchain.shape[1]):        
+        gkde = gaussian_kde ( fchain[:,idx], bw_method=bw )
+        key = chain_args[idx]
+        xmin,xmed,xmax = np.quantile(fchain[:,idx], [0.,.5,1.])
+        start = xmed - (xmed-xmin)*covering_factor
+        end = xmed + (xmax - xmed)*covering_factor
+        domain = np.linspace(start, end,npts)
+        arr_d[key] = np.array([domain,gkde(domain)])
+    return arr_d
+
+        
     
 def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
     if source == 'SBAM':
