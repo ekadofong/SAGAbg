@@ -3,9 +3,13 @@ from scipy.stats import gaussian_kde
 import pyneb as pn
 from . import line_db, models
 
+temperature_zones = {'O3':'Toiii',
+                     'O2':'Toii'}
+
 c_red = np.array([-1.857, 1.04])
 c_blue  = np.array([-2.156, 1.509, -0.198, 0.011])  
 b0 = 2.659  
+
 def calzetti00 ( wave, unit='AA' ):
     '''
     Calzetti attenuation where
@@ -173,6 +177,7 @@ class LineArray (object):
             self.domain.append((lrobs.min(), min(100,lrobs.max())))
         
     def temperature_zones ( self, lineratio_tuple, temperature ):
+        # XXX Andrews + 2013: this doesn't actually work?
         lowt = ['[NII]','[SII]','[OII]']
         hight= ['[OIII]']
         species = lineratio_tuple[2].strip('0123456789')
@@ -184,31 +189,46 @@ class LineArray (object):
             return temperature
             
     def predict ( self, args ):
-        T,ne,Av = args
+        Toiii, Toii,ne, Av = args
+        #ne=100.
         prediction = np.zeros ( self.n_ratios, dtype=float )
         for idx,lr in enumerate(self.rl_objects):
-            temperature = self.temperature_zones(self.line_ratios[idx], T)
+            species = ''.join([str(x) for x in self.line_ratios[idx][:2]])
+            if species == 'O3':
+                temperature = Toiii
+            elif species == 'O2':
+                temperature = Toii
+            else:
+                temperature = Toii # \\ assign N2 to be the OII temperature, for now
+            #temperature = #self.temperature_zones(self.line_ratios[idx], T)
             prediction[idx] = lr.predict ( temperature, ne, Av )
         return prediction
     
     def log_prior ( self, args ):
-        T,ne,Av = args
+        Toiii, Toii,ne, Av = args
         m_ne = 2. # np.log10(100.)
-        s_ne = 0.1
+        s_ne = 0.25
+        #ne=100.
 
-        if (T<9e3) or (T>2e4):
+        if (Toiii<7e3) or (Toiii>2e4):
             self.pcode = 0
             return -np.inf
+        if (Toii<7e3) or (Toii>2e4):
+            self.pcode = 0
+            return -np.inf        
         #elif (ne<1e-4) or (ne>1e4):
         #    self.pcode = 1
         #    return -np.inf     #   
         elif Av < 0:
             self.pcode = 2
             return -np.inf 
-        #elif (ne < 50.) or (ne > 200.):
-        #    return -np.inf
+        elif (ne < 100.) or (ne > 1000.):
+            return -np.inf
         
         lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * s_ne**2)**-1, m_ne, s_ne ))
+        # \\ fuzzily enforce the T2-T3 relation
+        # \\ based off of the relation from remeasuring metallicities of Andrews+2013
+        lp += np.log(models.gaussian(Toii-Toiii, 'normalize', -2500., 1000.) )
         
         if not np.isfinite(lp):
             self.pcode = 3
