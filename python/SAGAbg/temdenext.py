@@ -121,13 +121,14 @@ def index_on_string ( dictionary, indices, sep=',' ):
     return values
     
 class LineArray (object):
-    def __init__ ( self, line_ratios=None ):
+    def __init__ ( self, line_ratios=None, fit_ne=True ):
         if line_ratios is None:
             self.line_ratios = line_db.line_ratios
         else:
             self.line_ratios = line_ratios
         self.n_ratios = len(self.line_ratios)
         self.build ()
+        self.fit_ne = fit_ne
         
     def build ( self ):
         self.rl_objects = []
@@ -225,9 +226,11 @@ class LineArray (object):
             probdensity = sampling.cross_then_flat(numerator_pdf, denominator_pdf )
             
             xmin,xmax   = np.quantile ( line_ratio, [0.,1.] )
+            xmin        = max(0., xmin)
+            xmax        = min(10., xmax)
             domain      = np.linspace ( xmin, xmax, npts )   
             assns       = np.digitize ( line_ratio, domain )            
-            pdf         = np.array([np.sum(probdensity[assns==x]) for x in np.unique(assns)])
+            pdf         = np.array([np.sum(probdensity[assns==x]) for x in np.arange(1, domain.shape[0]+1)])
             nrml        = np.trapz(pdf, domain)
             pdf        /= nrml
             interpfn = sampling.build_interpfn( domain, pdf )
@@ -267,8 +270,11 @@ class LineArray (object):
             return temperature
             
     def predict ( self, args ):
-        Toiii, Toii,ne, Av = args
-        #ne=100.
+        if self.fit_ne:
+            Toiii, Toii, ne, Av, = args
+        else:
+            Toiii, Toii, Av = args
+            ne=100.
         prediction = np.zeros ( self.n_ratios, dtype=float )
         for idx,lr in enumerate(self.rl_objects):
             species = ''.join([str(x) for x in self.line_ratios[idx][:2]])
@@ -283,10 +289,14 @@ class LineArray (object):
         return prediction
     
     def log_prior ( self, args ):
-        Toiii, Toii,ne, Av = args
+        if self.fit_ne:
+            Toiii, Toii, ne, Av = args
+        else:
+            Toiii, Toii, Av = args
+            ne=100.
         m_ne = 2. # np.log10(100.)
         s_ne = 0.25
-        #ne=100.
+        #
 
         if (Toiii<7e3) or (Toiii>2e4):
             self.pcode = 0

@@ -245,12 +245,11 @@ class EmceeSpec ( object ):
         self.pcode = 0
         
     def load_posterior ( self, fname, sample_fluxes=True, nsample=1000):
-        gkde_arr = np.load ( fname )
-        # fluxes = fchain[:,:n_lines] * np.sqrt(2.*np.pi) * fchain[:,-2].reshape(-1,1)
-        #self.psample = gkde_arr
-        #for line in self.model.emission_lines.keys():
-        #    flux_pdf = gkde_arr[f'flux_{line}']
-        self.psample = gkde_arr
+        gkde_d = {}
+        with np.load ( fname ) as npz:
+            for key in npz.keys():
+                gkde_d[key] = npz[key]
+        self.psample = gkde_d
         
         if sample_fluxes:
             from ekfstats import sampling
@@ -258,10 +257,7 @@ class EmceeSpec ( object ):
             self.obs_fluxes = np.zeros([nsample, self.model.n_emission])
             for idx,fkey in enumerate(flux_keys):
                 self.obs_fluxes[:,idx] = sampling.rejection_sample_fromarray (*self.psample[fkey], nsamp=nsample)
-        # \\ X this since we are not longer saving the chains directly
-        # fchain = np.loadtxt ( fname )#f'../local_data/SBAM/bayfit/{wid}/{wid}-chain.txt' )
-        # self.psample = fchain
-        # self.obs_fluxes = get_linefluxes ( fchain, self.model.n_emission )
+
         
     def _values_to_arr ( self, x ):
         return np.asarray(list(x.values()))
