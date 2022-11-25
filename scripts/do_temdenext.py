@@ -12,9 +12,9 @@ from SAGAbg import models, temdenext
 import catalogs
 
 def setup_run (lineratio_arrays, nwalkers, 
-               Tlow=9000., Thigh=20000.,
+               Tlow=7000., Thigh=20000.,
                nelow=10., nehigh=1000.,
-               Avlow=0., Avhigh=1. ):
+               Avlow=0., Avhigh=1., fit_ne=True ):
     '''
     Initialize walkers over a uniform distribution of physically
     plausible HII region conditions:
@@ -22,8 +22,12 @@ def setup_run (lineratio_arrays, nwalkers,
     ne = [10, 1000] cc
     Av = [0 1]
     '''
-    pl = [Tlow, nelow, Avlow]
-    ph = [Thigh, nehigh, Avhigh]
+    if fit_ne:    
+        pl = [Tlow, Tlow, nelow, Avlow]
+        ph = [Thigh,Thigh,nehigh,Avhigh]
+    else:
+        pl = [Tlow, Tlow, Avlow]
+        ph = [Thigh, Thigh, Avhigh]
     pinit = np.zeros([nwalkers, len(pl)])
     added = 0
     iters = 0
@@ -44,15 +48,13 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     '''
     if species_d is None:
         species_d = {'[OII]':('O',2),
-                    '[OIII]':('O',3)}      
-                 
-    args = np.nanmedian(fchain,axis=0)
+                    '[OIII]':('O',3)}    
+    lines_d = {'[OIII]':['[OIII]5007'], '[OII]':['[OII]3729']} 
+    if not la.fit_ne:
+        ne = 100. # XXX fix density?         
     
     # \\ establish baseline H indicator
     betaindex = la.espec.model.get_line_index('Hbeta')
-    fhb_corr = temdenext.extinction_correction(la.espec.model.emission_lines['Hbeta'],
-                                            la.espec.obs_fluxes[:,betaindex],
-                                            args[-1])
     
     hrec = pn.RecAtom('H',1)
     cumulative_abundance_estimates = {}
@@ -63,19 +65,29 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     # \\ estimate abundances using all lines from species
     for ix in range(npull):
         rint = np.random.randint(fchain.shape[0])
-        args = fchain[rint]
+        if la.fit_ne:
+            TeOIII, TeOII,ne, Av = fchain[rint] # pull conditions
+        else:
+            TeOIII, TeOII, Av = fchain[rint] # pull conditions
+        
+        fhb_corr = temdenext.extinction_correction(la.espec.model.emission_lines['Hbeta'],
+                                                   la.espec.obs_fluxes[:,betaindex], Av)        
                 
-        Te = la.temperature_zones ( species, args[0] )
-        hbeta_emissivity = hrec.getEmissivity(Te, args[1], lev_i=4, lev_j=2) # XXX is this the right temperature?
+
+        hbeta_emissivity = hrec.getEmissivity(TeOII, ne, lev_i=4, lev_j=2) # XXX is this the right temperature?        
         for species in species_d.keys():
+            if species=='[OIII]':
+                Te = TeOIII
+            elif species=='[OII]':
+                Te = TeOII
+
             atom = pn.Atom(*species_d[species])
-            lines = [ x for x in la.espec.model.emission_lines.keys() if species in x ]
+            lines = lines_d[species] 
+            #[ x for x in la.espec.model.emission_lines.keys() if species in x ]
             
             line_emissivity = 0.
             flux_corr = np.zeros(la.espec.obs_fluxes.shape[0], dtype=float)
-            for idx,lname in enumerate(lines):
-                Te = la.temperature_zones ( species, args[0] )
-                ne = args[1]
+            for lname in lines:                            
                 line = la.espec.model.emission_lines[lname]
                 if isinstance(line, float):
                     line_emissivity += atom.getEmissivity(Te,ne,
@@ -86,13 +98,15 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
                                                             *atom.getTransition(wl))
                 lidx = la.espec.model.get_line_index ( lname )
                 flux_corr += temdenext.extinction_correction (np.mean(la.espec.model.emission_lines[lname]), 
-                                                            la.espec.obs_fluxes[:,lidx], args[-1] ) 
+                                                            la.espec.obs_fluxes[:,lidx], Av ) 
             intensity_ratio = flux_corr / fhb_corr
             emissivity_ratio = hbeta_emissivity / line_emissivity
             cumulative_abundance_estimates[species][ix] = emissivity_ratio * intensity_ratio
-    return cumulative_abundance_estimates
+            
+    oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
+    return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
+def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True):
     '''
     Run inference
     '''
@@ -101,11 +115,11 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     cl = models.CoordinatedLines (z=z)
     espec = models.EmceeSpec ( cl )
     espec.load_posterior ( lr_filename )
-        
-    la = temdenext.LineArray ()
+     
+    la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
     
-    p0 = setup_run ( la, nwalkers )
+    p0 = setup_run ( la, nwalkers, fit_ne=fit_ne )
     ndim = p0.shape[1] 
     
     sampler = emcee.EnsembleSampler( nwalkers, ndim, la.log_prob, )
@@ -113,16 +127,17 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True):
     #kwargs = {'flat':True,'discard':100}
     fchain = sampler.get_chain ( flat=True, discard=discard )  
     condition_stats = np.quantile(fchain, [0.025,.16,.5,.84,0.975],axis=0 )
+    
     # \\ save OH or save OII/OIII?  
-    abundances = estimate_abundances ( la, fchain )
-    oh = np.log10(abundances['[OII]'] + abundances['[OIII]'])+12.
+    oh, abundances = estimate_abundances ( la, fchain )
+    #oh = np.log10(abundances['[OII]'] + abundances['[OIII]'])+12.
     oiii = np.nanquantile(abundances['[OIII]'], [0.025,.16,.5,.84,0.975]) * 1e5 # abundances X 10^5
     oii = np.nanquantile(abundances['[OII]'], [0.025,.16,.5,.84,0.975]) * 1e5 # abundances X 10^5
     oh_q = np.nanquantile(oh, [0.025,.16,.5,.84,0.975])
     abundances_stats = np.array([oii,oiii,oh_q])
-    np.savetxt ( lr_filename.replace('chain','conditions'), condition_stats ) 
-    np.savetxt ( lr_filename.replace('chain','abundances'), abundances_stats )
-    return la, sampler
+    np.savetxt ( lr_filename.replace('bfit.npz','conditions.txt'), condition_stats ) 
+    np.savetxt ( lr_filename.replace('bfit.npz','abundances.txt'), abundances_stats )
+    return la, sampler, oh
 
 
 def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
