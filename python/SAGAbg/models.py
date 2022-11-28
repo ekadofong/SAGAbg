@@ -1,5 +1,7 @@
 import numpy as np
+from scipy import integrate
 from astropy import modeling 
+from ekfstats import sampling
 from SAGAbg import line_db
 from .line_db import *
 
@@ -27,9 +29,8 @@ def get_lineblocs ( wave, z=0., lines=None, window_width=None, line_width=None )
         line_width = DEFAULT_LINE_WIDTH*(1.+z)
     if lines is None:
         lines = np.asarray(list(line_wavelengths.values()))
-    elif isinstance(lines, float):
-        lines = np.asarray([lines])
-
+    elif isinstance(lines, float) or isinstance(lines, list):
+        lines = np.asarray([lines]).flatten()
     lines = lines*(1. + z)
     
     distance_from_lines =abs(wave[np.newaxis,:] - lines[:,np.newaxis])
@@ -119,13 +120,25 @@ def get_equivalentwidths ( fchain, cl ):
 class CoordinatedLines ( object ):
     def __init__ ( self, emission_lines=None, absorption_lines=None, continuum_windows=None, z=0., window_width=140 ):
         if emission_lines is None:
-            emission_lines = line_db.line_wavelengths
+            emission_lines = {}
+            for key in line_db.line_wavelengths.keys():
+                emission_lines[key] = np.mean(line_db.line_wavelengths[key]) # use mean WL for unresolved multiplets                
         if absorption_lines is None:
-            absorption_lines = dict(zip(line_db.BALMER_ABSORPTION, 
-                                    [line_db.line_wavelengths[x] for x in line_db.BALMER_ABSORPTION]))
+            absorption_lines = {}        
+            for key in line_db.BALMER_ABSORPTION:
+                if key in emission_lines.keys():
+                    absorption_lines[key] = emission_lines[key]            
         if continuum_windows is None:
-            continuum_windows = dict(zip(line_db.CONTINUUM_TAGS, 
-                                    [line_db.line_wavelengths[x] for x in line_db.CONTINUUM_TAGS]))
+            continuum_windows = {}
+            for key in line_db.CONTINUUM_TAGS:
+                if key in emission_lines.keys():
+                    continuum_windows[key] = emission_lines[key]                    
+        #if absorption_lines is None:
+        #    absorption_lines = dict(zip(line_db.BALMER_ABSORPTION, 
+        #                            [line_db.line_wavelengths[x] for x in line_db.BALMER_ABSORPTION]))
+        #if continuum_windows is None:
+        #    continuum_windows = dict(zip(line_db.CONTINUUM_TAGS, 
+        #                            [line_db.line_wavelengths[x] for x in line_db.CONTINUUM_TAGS]))
         
         self.emission_lines = emission_lines
         self.absorption_lines = absorption_lines
@@ -215,12 +228,14 @@ class CoordinatedLines ( object ):
         
         value = np.zeros_like(xs, dtype=float)
         for absorption_key in self.absorption_lines:
-            value += gaussian_ew (xs, EW*self.ew_ratio[absorption_key], fc[absorption_key], 
+            value += gaussian_ew (xs, 
+                                  EW*self.ew_ratio[absorption_key], 
+                                  fc[absorption_key], 
                                   (self.absorption_lines[absorption_key] + wiggle[absorption_key])*(1.+z), 
                                   stddev_abs)
             
         for continuum_key in self.continuum_windows:   
-            wl_offset = (self.continuum_windows[continuum_key] + wiggle[continuum_key])*(1.+z)         
+            wl_offset = (self.continuum_windows[continuum_key] + wiggle[continuum_key])*(1.+z)                
             window = abs(xs - wl_offset) <= (self.window_width*(1.+z)/2.)
             value += window * fc[continuum_key]
         return value        
@@ -258,6 +273,29 @@ class EmceeSpec ( object ):
             for idx,fkey in enumerate(flux_keys):
                 self.obs_fluxes[:,idx] = sampling.rejection_sample_fromarray (*self.psample[fkey], nsamp=nsample)
 
+    def test_detection ( self, line_name, fc_name=None, alpha=0.99 ):     
+        if fc_name is None:
+            cwavelengths = np.asarray(list(self.model.continuum_windows.values ()))
+            match = np.argmin(abs(self.model.emission_lines[line_name] - cwavelengths))
+            fc_name = list(self.model.continuum_windows.keys())[match]  
+            
+        stddev = self.psample['stddev_emission']
+        fc = self.psample[f'fc_{fc_name}']
+        line_flux = self.psample[f'flux_{line_name}']
+        xs = line_flux[0]
+        ys = line_flux[1]
+        fn = sampling.build_interpfn(xs,ys)
+        
+        mp_fc = np.trapz(fc[0]*fc[1], fc[0])
+        delfc = (fc[0]-mp_fc)*np.sqrt(2.*np.pi)
+        
+        # prob density function from uncertainty in f_c(lambda) given stddev PDF
+        blankflux_pdf = sampling.pdf_product ( delfc, fc[1], stddev[0], stddev[1] ) 
+        
+        cutoff = sampling.get_quantile ( delfc, blankflux_pdf(delfc), alpha )
+        prob_below = integrate.quad(fn, 0., cutoff)[0]
+        return prob_below
+        
         
     def _values_to_arr ( self, x ):
         return np.asarray(list(x.values()))

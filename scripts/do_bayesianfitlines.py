@@ -113,8 +113,6 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
             if idx==0: 
                 ax.errorbar(wave[inbloc], flux[inbloc],color='k',fmt='o', yerr=u_flux[inbloc],zorder=0, markersize=5 )
                 ax.text (0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left' )                
-
-            #fmask = inbloc #cl.evaluate(wave[inbloc]) > 0.1
             ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05)
             ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05)
             ax.axvline ( cl.emission_lines[key]*(1.+cl.z), color='grey', ls='--', zorder=0, lw=0.5)
