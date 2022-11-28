@@ -270,7 +270,9 @@ class EmceeSpec ( object ):
         can be neglected in the case where the lines are sufficiently close together in
         wavelength space.
         '''
-        if lr >= bound:
+        if hasattr(lr, '__len__'):
+            return ( 1. + np.exp(-k*(lr - bound*b)))**-1
+        elif lr >= bound:
             return 1.
         elif lr < bound:
             return ( 1. + np.exp(-k*(lr - bound*b)))**-1
@@ -333,6 +335,7 @@ class EmceeSpec ( object ):
         #if self.model.has_line('[OII]3729') and self.model.has_line('[OII7320]'):
         #    doublet_amplitude = self.model.amplitudes['[OII]3729']
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7330']/doublet_amplitude, 0.06))
+        #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7320']/doublet_amplitude, 0.05))
         
         self.pcode = 0
         return lp

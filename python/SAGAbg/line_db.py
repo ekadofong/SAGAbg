@@ -13,14 +13,34 @@ NII_wavelengths = {'[NII]6548': 6547.952750702898,
 SII_wavelengths = {'[SII]6731': 6730.713900332137, '[SII]6717': 6716.33869898957}
 FeX = {'FeX':6374.}
 
-line_ratios = [("H", 1, 'Halpha', 'Hbeta'),
+line_ratios = [
+               ("H", 1, 'Halpha', 'Hbeta'),
                #("H", 1, 'Halpha', 'Hdelta'),
                #("H", 1, 'Halpha', 'Hgamma'),
                ('S', 2, '[SII]6717', '[SII]6731'), 
                #('N',2, '[NII]5755', '[NII]6548'),              
                ('O',2,'[OII]7330', '[OII]3729'),
                ('O',2,'[OII]7320', '[OII]3729'),
-               ('O',3,'[OIII]4363', '[OIII]5007')]
+               ('O',3,'[OIII]4363', '[OIII]5007')
+               ]
+
+# \\ testing to see if we make an improvement over theoretical limits with
+# \\ resulting constraints on the observed line ratio
+line_ratio_theorymax = [ 
+                        100.,   #\\ Ha/Hb
+                        1.46,   #\\ SII6716/SII6731 
+                        #0.493,  #\\ NII5755/6548
+                        0.0456, #\\ OII7330/3729+3727
+                        0.0564, #\\ OII7320/3729+3727
+                        0.160,  #\\ OIII4363/5007
+                        ]
+line_ratio_theorymin = [
+                        0.,
+                        0.685,
+                        0.,
+                        0.,
+                        0.
+                        ]
 
 line_lists = [balmer_wavelengths, OIII_wavelengths, OII_wavelengths, SII_wavelengths, NII_wavelengths, FeX]
 line_wavelengths = {}

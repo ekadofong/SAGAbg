@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.stats import gaussian_kde
-from scipy.interpolate import interp1d
+from scipy import integrate
 import pyneb as pn
 from ekfstats import sampling
 from . import line_db, models
@@ -340,5 +340,16 @@ class LineArray (object):
         if not np.isfinite(lnprior):
             return -np.inf
         return lnprior + self.log_likelihood ( args )
-            
+                        
+    def is_constrained ( self, lidx, alpha=0.995 ):
+        xs = np.linspace(*self.domain[lidx], num=1000)
+        cumtrapz = integrate.cumulative_trapezoid(self.gkde[lidx](xs),xs)
+        midpts = 0.5*(xs[1:]+xs[:-1])
+        u95 = np.interp(alpha, cumtrapz,midpts)
+        l95 = np.interp(1.-alpha, cumtrapz, midpts)
+
+        makes_constraint = u95 < line_db.line_ratio_theorymax[lidx]
+        if line_db.line_ratio_theorymin[lidx] > 0.:
+            makes_constraint |= l95 > line_db.line_ratio_theorymin[lidx]
+        return makes_constraint, (l95, u95)           
             
