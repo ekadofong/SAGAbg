@@ -106,7 +106,8 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True):
+def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True, require_detections=True,
+         return_dataproducts=False):
     '''
     Run inference
     '''
@@ -118,6 +119,22 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, 
      
     la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
+    
+    # \\ require constraints on line ratios to be better than 
+    # \\ the physical range
+    for lidx in range(len(la.line_ratios)):
+        is_constrained, _ = la.is_constrained ( lidx )
+        if not is_constrained:
+            print (f'{la.line_ratios[lidx][2]}/{la.line_ratios[lidx][3]} not constrained')
+        if not is_constrained and require_detections:            
+            with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
+                print('failed line constraint test', file = f)
+            if return_dataproducts:
+                return 20+lidx,None,None
+            else:
+                return 20 + lidx
+        
+
     
     p0 = setup_run ( la, nwalkers, fit_ne=fit_ne )
     ndim = p0.shape[1] 
@@ -137,7 +154,10 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, 
     abundances_stats = np.array([oii,oiii,oh_q])
     np.savetxt ( lr_filename.replace('bfit.npz','conditions.txt'), condition_stats ) 
     np.savetxt ( lr_filename.replace('bfit.npz','abundances.txt'), abundances_stats )
-    return la, sampler, oh
+    if return_dataproducts:
+        return la, sampler, oh
+    else:
+        return 0 
 
 
 def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
@@ -151,7 +171,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir).query('p_sat_corrected==1')
         
     # \\ identify objects with line ratio measurements
-    run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*chain.txt' % inputdir)]    
+    run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*bfit.npz' % inputdir)]    
     parent = parent.reindex(run_names)
     if end == -1:
         end = None
@@ -162,11 +182,18 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             print(f'beginning {name}')        
             start = time.time ()
         try:
-            lr_filename = f'{inputdir}/{name}/{name}-chain.txt'
-            if os.path.exists(lr_filename.replace('chain','abundances')) and not clobber:
+            lr_filename = f'{inputdir}/{name}/{name}-bfit.npz'
+            if os.path.exists(lr_filename.replace('bfit.npz','abundances.txt')) and not clobber:
+                print(f'{name} already run. Skipping...')
+                continue
+            elif os.path.exists(lr_filename.replace('bfit.npz', 'flag')) and not clobber:
+                print(f'{name} has already been shown to fail line detection tests')
                 continue
             z = parent.loc[name, 'SPEC_Z']
-            run (lr_filename, z, **kwargs )
+            code = run (lr_filename, z, **kwargs )
+            if code > 20:
+                print(f'{name} is missing meaningful line constraints')
+                continue
         except Exception as e:
             print(f'{name} failed: {e}')
             continue
