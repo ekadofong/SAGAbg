@@ -107,7 +107,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     return oh, cumulative_abundance_estimates
 
 def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True, require_detections=True,
-         return_dataproducts=False):
+         return_dataproducts=False, detection_cutoff=0.05):
     '''
     Run inference
     '''
@@ -116,6 +116,27 @@ def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, 
     cl = models.CoordinatedLines (z=z)
     espec = models.EmceeSpec ( cl )
     espec.load_posterior ( lr_filename )
+    
+    # \\ require at least one weak OII & OIII line to be detected
+    # \\ where we define detection to be that the probability that
+    # \\ the 99th percentile of the
+    # \\ flux from the f_c uncertainty is <0.05 of the flux PDF
+    crucial_weaklines = [['[OIII]4363'],['[OII]7320','[OII]7330']]
+    is_detected = np.zeros(len(crucial_weaklines),dtype=bool)
+    for idx,slot in enumerate(crucial_weaklines):
+        for line_name in slot:
+            got_det = espec.test_detection( line_name ) <= detection_cutoff            
+            if got_det:
+                is_detected[idx] = True
+                break    
+    bingpot = is_detected.all()
+    if not bingpot and require_detections:
+        with open(lr_filename.replace('bfits.npz', 'flag'), 'w') as f:
+            print('failed line detection test', file=f)
+        if return_dataproducts:
+            return 300 + 10*int(~is_detected[0]) + int(~is_detected[1]), None, None
+        else:
+            return 300 + 10*int(~is_detected[0]) + int(~is_detected[1])
      
     la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
