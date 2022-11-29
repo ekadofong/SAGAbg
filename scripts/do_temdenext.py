@@ -10,6 +10,8 @@ import pyneb as pn
 from SAGAbg import models, temdenext
 
 import catalogs
+import logistics
+tdict = logistics.load_filters()
 
 def setup_run (lineratio_arrays, nwalkers, 
                Tlow=7000., Thigh=20000.,
@@ -106,57 +108,65 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, z, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True, require_detections=True,
-         return_dataproducts=False, detection_cutoff=0.05):
+def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True, require_detections=True,
+         return_dataproducts=False, detection_cutoff=1e-3, verbose='vv'):
     '''
     Run inference
     '''
     #z = sbam.loc[wid, 'SPEC_Z']
     #fname = f'../local_data/SBAM/bayfit/{wid}/{wid}-chain.txt'
+    z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
-    espec = models.EmceeSpec ( cl )
+    wave,flux = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
+    #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
+    espec = models.EmceeSpec ( cl, wave, flux )
     espec.load_posterior ( lr_filename )
     
     # \\ require at least one weak OII & OIII line to be detected
     # \\ where we define detection to be that the probability that
     # \\ the 99th percentile of the
     # \\ flux from the f_c uncertainty is <0.05 of the flux PDF
-    crucial_weaklines = [['[OIII]4363'],['[OII]7320','[OII]7330']]
-    is_detected = np.zeros(len(crucial_weaklines),dtype=bool)
+    crucial_weaklines = [['[OIII]4363']]#,['[OII]7320','[OII]7330']]
+    pblank = np.zeros(len(crucial_weaklines),dtype=float)
     for idx,slot in enumerate(crucial_weaklines):
         for line_name in slot:
-            got_det = espec.test_detection( line_name ) <= detection_cutoff            
+            tdet = espec.test_detection( line_name ) 
+            pblank[idx] = tdet
+            got_det = tdet <= detection_cutoff                        
             if got_det:
-                is_detected[idx] = True
-                break    
+                if verbose == 'vv':
+                    print(f"+ Detection of {line_name} ({tdet:.2f})")
+                #is_detected[idx] = True
+            else:
+                if len(verbose)>0:
+                    print(f"No detection of {line_name} ({tdet:.2f})")
+    is_detected = pblank <= detection_cutoff
     bingpot = is_detected.all()
     if not bingpot and require_detections:
-        with open(lr_filename.replace('bfits.npz', 'flag'), 'w') as f:
+        with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
         if return_dataproducts:
-            return 300 + 10*int(~is_detected[0]) + int(~is_detected[1]), None, None
+            return 30 + int(~is_detected[0]), None, None
         else:
-            return 300 + 10*int(~is_detected[0]) + int(~is_detected[1])
+            return 30 + int(~is_detected[0])
      
     la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
     
     # \\ require constraints on line ratios to be better than 
     # \\ the physical range
-    for lidx in range(len(la.line_ratios)):
-        is_constrained, _ = la.is_constrained ( lidx )
-        if not is_constrained:
-            print (f'{la.line_ratios[lidx][2]}/{la.line_ratios[lidx][3]} not constrained')
-        if not is_constrained and require_detections:            
-            with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
-                print('failed line constraint test', file = f)
-            if return_dataproducts:
-                return 20+lidx,None,None
-            else:
-                return 20 + lidx
+    #for lidx in range(len(la.line_ratios)):
+    #    is_constrained, _ = la.is_constrained ( lidx )
+    #    if not is_constrained:
+    #        print (f'{la.line_ratios[lidx][2]}/{la.line_ratios[lidx][3]} not constrained')
+    #    if not is_constrained and require_detections:            
+    #        with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
+    #            print('failed line constraint test', file = f)
+    #        if return_dataproducts:
+    #            return 20+lidx,None,None
+    #        else:
+    #            return 20 + lidx
         
-
-    
     p0 = setup_run ( la, nwalkers, fit_ne=fit_ne )
     ndim = p0.shape[1] 
     
@@ -210,8 +220,8 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             elif os.path.exists(lr_filename.replace('bfit.npz', 'flag')) and not clobber:
                 print(f'{name} has already been shown to fail line detection tests')
                 continue
-            z = parent.loc[name, 'SPEC_Z']
-            code = run (lr_filename, z, **kwargs )
+            row = parent.loc[name]
+            code = run (lr_filename, row, **kwargs )
             if code > 20:
                 print(f'{name} is missing meaningful line constraints')
                 continue
