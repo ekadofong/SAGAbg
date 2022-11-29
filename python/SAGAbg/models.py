@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import integrate
+from scipy import integrate, stats
 from astropy import modeling 
 from ekfstats import sampling
 from SAGAbg import line_db
@@ -113,8 +113,8 @@ def get_linefluxes ( fchain, n_lines ):
     return fluxes
 
 def get_equivalentwidths ( fchain, cl ):
-    fluxes = get_linefluxes ( fchain, cl.n_emission )
-    fc =  fchain[:,cl.n_emission:(cl.n_emission+cl.n_continuum)]
+    fluxes = get_linefluxes ( fchain, self.model.n_emission )
+    fc =  fchain[:,self.model.n_emission:(self.model.n_emission+self.model.n_continuum)]
     
 
 class CoordinatedLines ( object ):
@@ -273,7 +273,29 @@ class EmceeSpec ( object ):
             for idx,fkey in enumerate(flux_keys):
                 self.obs_fluxes[:,idx] = sampling.rejection_sample_fromarray (*self.psample[fkey], nsamp=nsample)
 
-    def test_detection ( self, line_name, fc_name=None, alpha=0.99 ):     
+    def test_detection (self, line_name, ):
+        '''
+        What is the probability of producing the output line amplitude if the "line" were
+        drawn from the surrounding "blank" spectrum? I.e. Pr = \int p[amplitude|blank] damplitude
+        '''
+        stddev = self.psample['stddev_emission']
+        line_flux = self.psample[f'flux_{line_name}']
+        amplitude_pdf = sampling.pdf_product ( line_flux[0], line_flux[1], (np.sqrt(2.*np.pi)*stddev[0])**-1, stddev[1] ) 
+        
+        # \\ pull blank spectrum near line
+        _,in_window = get_lineblocs ( self.wave, z=self.model.z, lines=self.model.emission_lines[line_name] )
+        in_any_line,_ = get_lineblocs ( self.wave, z=self.model.z, lines=list(self.model.emission_lines.values()) )        
+        blankflux = self.flux[in_window&~in_any_line]
+        blank_pdf = stats.gaussian_kde ( blankflux - np.median(blankflux), bw_method=sampling.wide_kdeBW(blankflux.size) )
+        
+        # \\ P[amplitude|blank] 
+        # \\ i.e., what is the probability of seeing this line amplitude assuming that it
+        # \\ is really only showing the blank spectrum?
+        conditional = lambda x: amplitude_pdf(x)*blank_pdf(x)    
+        pamp = integrate.quad(conditional, -np.inf, np.inf )[0]    
+        return pamp
+
+    def DEP_test_detection ( self, line_name, fc_name=None, alpha=0.995 ):     
         if fc_name is None:
             cwavelengths = np.asarray(list(self.model.continuum_windows.values ()))
             match = np.argmin(abs(self.model.emission_lines[line_name] - cwavelengths))
