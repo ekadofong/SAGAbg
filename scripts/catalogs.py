@@ -3,8 +3,6 @@ from astropy import cosmology
 import SAGA  
 from SAGAbg.utils import calc_kcor
 
-
-
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
 def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users/kadofong/DropBox/SAGA/',
@@ -41,7 +39,13 @@ def build_SBAM (*args, **kwargs):
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
     return subset
 
-
+def build_SBAMz (*args, **kwargs):
+    '''
+    Load the SAGA Background AAT MMT sample
+    '''
+    clean = build_saga_catalog ( *args, **kwargs ).to_pandas ()
+    subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.1)')
+    return subset
 
 def estimate_stellarmass (clean, distmod=None):
     kcorrect = calc_kcor.calc_kcor
