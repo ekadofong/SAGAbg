@@ -11,8 +11,7 @@ def produce_gaussianfn ( A, m, s):
 
 def gaussian ( x, A, m, s):
     if A == 'normalize':
-        A = np.sqrt(2.*np.pi * s**2)**-1
-    
+        A = np.sqrt(2.*np.pi * s**2)**-1    
     return A * np.exp ( -(x-m)**2 / (2.*s**2) )
 
 def gaussian_ew ( x, EW, fc, m, s):
@@ -122,7 +121,13 @@ class CoordinatedLines ( object ):
         if emission_lines is None:
             emission_lines = {}
             for key in line_db.line_wavelengths.keys():
-                emission_lines[key] = np.mean(line_db.line_wavelengths[key]) # use mean WL for unresolved multiplets                
+                emission_lines[key] = np.mean(line_db.line_wavelengths[key]) # use mean WL for unresolved multiplets
+        elif isinstance(emission_lines,list):
+            elines = {}
+            for key in emission_lines:
+                elines[key] = np.mean(line_db.line_wavelengths[key]) # use mean WL for unresolved multiplets            
+            emission_lines = elines
+            
         if absorption_lines is None:
             absorption_lines = {}        
             for key in line_db.BALMER_ABSORPTION:
@@ -291,9 +296,17 @@ class EmceeSpec ( object ):
         # \\ P[amplitude|blank] 
         # \\ i.e., what is the probability of seeing this line amplitude assuming that it
         # \\ is really only showing the blank spectrum?
-        conditional = lambda x: amplitude_pdf(x)*blank_pdf(x)    
-        pamp = integrate.quad(conditional, -np.inf, np.inf )[0]    
-        return pamp
+        #conditional = lambda x: amplitude_pdf(x)*blank_pdf(x)    
+        #pamp = integrate.quad(conditional, -np.inf, np.inf )[0]    
+        
+        # \\ "Probability that the amplitude is less than the likely range of the blank spectrum"
+        # \\ Pr[blank>amplitude] = Pr[blank>a|a]Pr[a]
+        # \\                     = int_-inf^inf int_~a^inf rho_blank(a) da rho_spec(~a) d~a 
+        mp_std = np.trapz(stddev[0]*stddev[1], stddev[0])
+        xs = line_flux[0]*(mp_std*np.sqrt(2.*np.pi))**-1
+        pdf = np.array([ integrate.quad(blank_pdf, cx, np.inf)[0]*amplitude_pdf(cx) for cx in xs ])
+        pblank = np.trapz(pdf,xs)
+        return pblank
 
     def DEP_test_detection ( self, line_name, fc_name=None, alpha=0.995 ):     
         if fc_name is None:
