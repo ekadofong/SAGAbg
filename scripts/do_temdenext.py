@@ -3,7 +3,7 @@ import time
 import glob
 import argparse
 import numpy as np
-#from astropy import cosmology
+from astropy import cosmology
 #import pandas as pd
 import emcee
 import pyneb as pn
@@ -108,8 +108,8 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=True, require_detections=True,
-         return_dataproducts=False, detection_cutoff=1e-3, verbose='vv'):
+def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=True,
+         return_dataproducts=False, detection_cutoff=0.05, verbose='vv', setup_only=False):
     '''
     Run inference
     '''
@@ -118,6 +118,18 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
     wave,flux = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
+    # \\ if AAT, flux calibration is not reliable past 8000 AA
+    if row['TELNAME'] == 'AAT':
+        wvmask = wave < 8000.
+        wave = wave[wvmask]
+        flux = flux[wvmask]
+    elif row['TELNAME'] == 'MMT':
+        wvmask = wave < 8200.
+        wave = wave[wvmask]
+        flux = flux[wvmask]        
+    else:
+        raise ValueError ('spectra from %s not flux calibrated' % row['TELNAME'])
+    
     #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
     espec = models.EmceeSpec ( cl, wave, flux )
     espec.load_posterior ( lr_filename )
@@ -135,11 +147,12 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
             got_det = tdet <= detection_cutoff                        
             if got_det:
                 if verbose == 'vv':
-                    print(f"+ Detection of {line_name} ({tdet:.2f})")
+                    print(f"+ Detection of {line_name} ({tdet:.4f})")
                 #is_detected[idx] = True
             else:
-                if len(verbose)>0:
-                    print(f"No detection of {line_name} ({tdet:.2f})")
+                if len(verbose) > 0:
+                    print(f"No detection of {line_name} ({tdet:.4f})")
+                    
     is_detected = pblank <= detection_cutoff
     bingpot = is_detected.all()
     if not bingpot and require_detections:
@@ -152,7 +165,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
      
     la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
-    
+
     # \\ require constraints on line ratios to be better than 
     # \\ the physical range
     #for lidx in range(len(la.line_ratios)):
@@ -168,7 +181,10 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     #            return 20 + lidx
         
     p0 = setup_run ( la, nwalkers, fit_ne=fit_ne )
-    ndim = p0.shape[1] 
+    ndim = p0.shape[1]
+    
+    if setup_only:
+        return la, p0     
     
     sampler = emcee.EnsembleSampler( nwalkers, ndim, la.log_prob, )
     out = sampler.run_mcmc( p0, nsteps, progress=progress )
@@ -198,12 +214,23 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
     '''
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+    elif source == 'SBAMz':
+        parent = catalogs.build_SBAMz (dropbox_directory=dropbox_dir)
     elif source == 'SBAMsat':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir).query('p_sat_corrected==1')
+    elif source == 'SBAMlm':
+        import pandas as pd
+        cosmo = cosmology.FlatLambdaCDM ( 70., 0.3 )
+        sbam = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+        distmod = cosmo.distmod(sbam['SPEC_Z'].values).value
+        kcorr = pd.read_csv('../local_data/scratch/kcorrections.csv',index_col=0)
+        Mr = sbam['r_mag'] - distmod - kcorr['K_r']
+        Mg = sbam['g_mag'] - distmod - kcorr['K_g']
+        logmstar = temdenext.CM_msun ( Mg, Mr )
         
     # \\ identify objects with line ratio measurements
-    run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*bfit.npz' % inputdir)]    
-    parent = parent.reindex(run_names)
+    #run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*bfit.npz' % inputdir)]    
+    #parent = parent.reindex(run_names)
     if end == -1:
         end = None
         
@@ -214,6 +241,9 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             start = time.time ()
         try:
             lr_filename = f'{inputdir}/{name}/{name}-bfit.npz'
+            if not os.path.exists ( lr_filename ):
+                print(f'{name} does not have line fit data. Skipping! ')
+                continue
             if os.path.exists(lr_filename.replace('bfit.npz','abundances.txt')) and not clobber:
                 print(f'{name} already run. Skipping...')
                 continue
@@ -222,8 +252,8 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
                 continue
             row = parent.loc[name]
             code = run (lr_filename, row, **kwargs )
-            if code > 20:
-                print(f'{name} is missing meaningful line constraints')
+            if code > 0:
+                #print(f'{name} is missing meaningful line constraints')
                 continue
         except Exception as e:
             print(f'{name} failed: {e}')
