@@ -107,9 +107,9 @@ class LineRatio ( object ):
     
     def predict ( self, temperature, density, Av ):
         ebv = Av / self.Rv
-        intrinisc_lineratio = self.predict_intrinsicratio ( temperature, density )
+        intrinsic_lineratio = self.predict_intrinsicratio ( temperature, density )
         extinction_correction = self.introduce_extinction ( ebv )
-        return extinction_correction * intrinisc_lineratio
+        return extinction_correction * intrinsic_lineratio
 
 def index_on_string ( dictionary, indices, sep=',' ):
     values = []
@@ -123,7 +123,7 @@ def index_on_string ( dictionary, indices, sep=',' ):
 class LineArray (object):
     def __init__ ( self, line_ratios=None, fit_ne=True ):
         if line_ratios is None:
-            self.line_ratios = line_db.line_ratios
+            self.line_ratios = line_db.line_ratios.copy()
         else:
             self.line_ratios = line_ratios
         self.n_ratios = len(self.line_ratios)
@@ -192,13 +192,19 @@ class LineArray (object):
         #fn = interp1d(val[0],val[1], bounds_error=False, fill_value=0.)
         self.gkde   = []
         self.domain = []
-        for lrargs in self.line_ratios:
+        rmarr = np.zeros(len(self.line_ratios), dtype=bool)
+        for lidx,lrargs in enumerate(self.line_ratios):
             names0 = [ f'flux_{x}' for x in lrargs[2].split(',') ]
             names1 = [ f'flux_{x}' for x in lrargs[3].split(',') ]
+            remove = False
             
             numerator_flux = None
             numerator_pdf  = None
-            for name in names0:
+            for name in names0:   
+                # \\ pop out line ratios that don't have measurements             
+                if name not in self.espec.psample.keys():
+                    rmarr[lidx] = True                    
+                    break 
                 ux,uy = sampling.upsample ( self.espec.psample[name][0], self.espec.psample[name][1] )
                 if numerator_flux is None:
                     numerator_flux = ux
@@ -211,17 +217,25 @@ class LineArray (object):
                     
             denominator_flux = None
             denominator_pdf  = None
-            for name in names1:
-                ux, uy = sampling.upsample ( self.espec.psample[name][0], self.espec.psample[name][1] )
-                if denominator_flux is None:
-                    denominator_flux = ux
-                    denominator_pdf  = uy
-                else:
-                    A,B = np.meshgrid ( denominator_flux, ux )
-                    denominator_flux = (A + B).flatten()
-                    pdfA,pdfB = np.meshgrid ( denominator_pdf, uy )
-                    denominator_pdf = (pdfA*pdfB).flatten()     
-                    
+            if not remove:
+                for name in names1:
+                    # \\ pop out line ratios that don't have measurements  
+                    if name not in self.espec.psample.keys():
+                        rmarr[lidx] = True                           
+                        break   
+                    ux, uy = sampling.upsample ( self.espec.psample[name][0], self.espec.psample[name][1] )
+                    if denominator_flux is None:
+                        denominator_flux = ux
+                        denominator_pdf  = uy
+                    else:
+                        A,B = np.meshgrid ( denominator_flux, ux )
+                        denominator_flux = (A + B).flatten()
+                        pdfA,pdfB = np.meshgrid ( denominator_pdf, uy )
+                        denominator_pdf = (pdfA*pdfB).flatten()     
+            
+            if rmarr[lidx]:
+                continue
+            
             line_ratio  = sampling.cross_then_flat(numerator_flux, denominator_flux**-1)
             probdensity = sampling.cross_then_flat(numerator_pdf, denominator_pdf )
             
@@ -236,6 +250,11 @@ class LineArray (object):
             interpfn = sampling.build_interpfn( domain, pdf )
             self.gkde.append ( interpfn )
             self.domain.append((xmin, min(100,xmax)))
+            
+        for lidx in np.arange(len(rmarr))[rmarr][::-1]:
+            del self.line_ratios[lidx]
+            del self.rl_objects[lidx]
+        self.n_ratios = self.n_ratios - sum(rmarr)
 
     
     def DEP_load_observations ( self, espec ):
@@ -324,11 +343,26 @@ class LineArray (object):
             self.pcode = 0
         return lp
     
+    @property
+    def mlp_lineratios ( self ):
+        mlp = np.zeros(len(self.gkde))
+        for idx in range(len(self.gkde)):
+            xs = np.linspace(*self.domain[idx])
+            mlp[idx] = np.trapz(self.gkde[idx](xs)*xs, xs)
+        return mlp
+    
     def log_likelihood ( self, args ):
         prediction = self.predict ( args )
         lnL = 0.
         for idx in range(self.n_ratios):
-            lnP = np.log(float(self.gkde[idx](prediction[idx])))
+            # \\ XXX hack shift Ha/Hb
+            if idx > 0:
+                shift = 0.
+            elif self.mlp_lineratios[idx] < 2.86:
+                shift = 2.86 - self.mlp_lineratios[idx]
+            else:
+                shift = 0.
+            lnP = np.log(float(self.gkde[idx](prediction[idx] - shift)))
             if np.isnan(lnP):
                 lnL = -np.inf
                 return lnL
