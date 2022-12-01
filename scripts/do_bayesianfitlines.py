@@ -109,14 +109,20 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
     for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], npull )):
         cl.set_arguments ( fchain[pull] )
         for ax,key in zip(f_axarr, cl.emission_lines.keys()):
-            inwindow,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
+            inline,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
             if idx==0: 
                 ax.errorbar(wave[inbloc], flux[inbloc],color='k',fmt='o', yerr=u_flux[inbloc],zorder=0, markersize=5 )
                 ax.text (0.025, 0.975, key, transform=ax.transAxes, va='top', ha='left' )                
-            ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05)
-            ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05)
+            ax.plot(wave[inbloc], cl.evaluate_no_emission(wave[inbloc]), color='b', ls='-', alpha=0.05, zorder=0)
+            ax.plot(wave[inbloc], cl.evaluate(wave[inbloc]), color='r', ls='-', alpha=0.05, zorder=0)
             ax.axvline ( cl.emission_lines[key]*(1.+cl.z), color='grey', ls='--', zorder=0, lw=0.5)
-            ax.set_ylim ( max(0.,ax.get_ylim()[0]),1.5*flux[inwindow].max() )
+            
+            if flux[inline].size == 0:
+                mmax = np.nanmax(flux[inbloc])
+            else:
+                mmax = np.nanmax(flux[inline])            
+            mmin = max(0.,ax.get_ylim()[0])
+            ax.set_ylim ( mmin, 1.75*mmax )
     return fig, axarr
                 
 
@@ -190,9 +196,7 @@ def approximate_kde ( cl, fchain, npts=100, covering_factor=1.5 ):
         else:
             gkde = gaussian_kde ( fchain[:,idx], bw_method=bw )            
             domain = get_kde_domain (fchain[:,idx], npts, covering_factor)
-            arr_d[key] = np.array([domain,gkde(domain)])
-                        
-        
+            arr_d[key] = np.array([domain,gkde(domain)]) 
     return arr_d
 
         
