@@ -4,7 +4,7 @@ from SAGAbg import line_fitting, SAGA_get_spectra
 
 AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
 
-def do_fluxcalibrate (obj, tdict, dropbox_dir):
+def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True):
     flux, wave, _, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
     if len(flux) == 0:
         return None, None
@@ -18,6 +18,20 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir):
         fluxcal = np.where ( wave < AAT_BREAK, flux*qfactors[0], flux*qfactors[1])*1e17
     else:
         fluxcal = flux * np.nanmean(qfactors)*1e17    
+    
+    if cut_red:
+        # \\ if AAT, flux calibration is not reliable past 8000 AA
+        if obj['TELNAME'] == 'AAT':
+            wvmask = wave < 8000.
+            wave = wave[wvmask]
+            fluxcal = fluxcal[wvmask]
+        elif obj['TELNAME'] == 'MMT':
+            wvmask = wave < 8200.
+            wave = wave[wvmask]
+            fluxcal = fluxcal[wvmask]        
+        else:
+            raise ValueError ('spectra from %s not flux calibrated' % obj['TELNAME'])
+            
     return wave, fluxcal    
 
 def load_filters ( filterset='DECam' ):
