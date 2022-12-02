@@ -268,6 +268,10 @@ class EmceeSpec ( object ):
         gkde_d = {}
         with np.load ( fname ) as npz:
             for key in npz.keys():
+                if ('flux' in key):
+                    element = key.split('_')[1]
+                    if element not in self.model.emission_lines.keys():
+                        continue
                 gkde_d[key] = npz[key]
         self.psample = gkde_d
         
@@ -278,7 +282,7 @@ class EmceeSpec ( object ):
             for idx,fkey in enumerate(flux_keys):
                 self.obs_fluxes[:,idx] = sampling.rejection_sample_fromarray (*self.psample[fkey], nsamp=nsample)
 
-    def test_detection (self, line_name, ):
+    def test_detection (self, line_name, return_pdf=False ):
         '''
         What is the probability of producing the output line amplitude if the "line" were
         drawn from the surrounding "blank" spectrum? I.e. Pr = \int p[amplitude|blank] damplitude
@@ -290,7 +294,7 @@ class EmceeSpec ( object ):
         # \\ pull blank spectrum near line
         _,in_window = get_lineblocs ( self.wave, z=self.model.z, lines=self.model.emission_lines[line_name] )
         in_any_line,_ = get_lineblocs ( self.wave, z=self.model.z, lines=list(self.model.emission_lines.values()) )        
-        blankflux = self.flux[in_window&~in_any_line]
+        blankflux = self.flux[in_window&~in_any_line]        
         blank_pdf = stats.gaussian_kde ( blankflux - np.median(blankflux), bw_method=sampling.wide_kdeBW(blankflux.size) )
         
         # \\ P[amplitude|blank] 
@@ -300,13 +304,17 @@ class EmceeSpec ( object ):
         #pamp = integrate.quad(conditional, -np.inf, np.inf )[0]    
         
         # \\ "Probability that the amplitude is less than the likely range of the blank spectrum"
-        # \\ Pr[blank>amplitude] = Pr[blank>a|a]Pr[a]
-        # \\                     = int_-inf^inf int_~a^inf rho_blank(a) da rho_spec(~a) d~a 
+        # \\ Pr[blank>amplitude] = int Pr[blank>a|a]Pr[a] da
+        # \\                     = int_-inf^inf int_~a^inf P_blank(a) da P_spec(~a) d~a 
         mp_std = np.trapz(stddev[0]*stddev[1], stddev[0])
         xs = line_flux[0]*(mp_std*np.sqrt(2.*np.pi))**-1
+        xs = np.linspace(*np.quantile(sampling.cross_then_flat ( line_flux[0], stddev[0] ),[0.,1.]), line_flux[0].size)
         pdf = np.array([ integrate.quad(blank_pdf, cx, np.inf)[0]*amplitude_pdf(cx) for cx in xs ])
         pblank = np.trapz(pdf,xs)
-        return pblank
+        if return_pdf:
+            return pblank, (xs, amplitude_pdf)
+        else:
+            return pblank
 
     def DEP_test_detection ( self, line_name, fc_name=None, alpha=0.995 ):     
         if fc_name is None:
