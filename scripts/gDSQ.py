@@ -56,8 +56,10 @@ if __name__ == '__main__':
     parser.add_argument ( '--taskname', action='store', default='bayesianfitlines'  )
     parser.add_argument ( '--source', '-S', action='store', default='SBAM' )
     parser.add_argument ( '--input', '-i', action='store', default='../local_data/SBAM/bayfit/' )
+    #parser.add_argument ( '--dropbox', '-d', action='/Users/kadofong/Dropbox/SAGA/')
     #parser.add_argument ( '--nfig', action='store', default=10 )
     args = parser.parse_args ()
     #step = int(args.step)
-    build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source, input=args.input )
+    build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source, input=args.input,
+            dropbox_directory=args.dropbox_directory )
     #build_dsqQ ( step, n_objects=int(args.nobjects) )

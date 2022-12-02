@@ -109,6 +109,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     return oh, cumulative_abundance_estimates
 
 def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=True,
+         dropbox_directory=None,
          return_dataproducts=False, detection_cutoff=0.05, verbose='vv', setup_only=False):
     '''
     Run inference
@@ -117,7 +118,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     #fname = f'../local_data/SBAM/bayfit/{wid}/{wid}-chain.txt'
     z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
-    wave,flux = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
+    wave,flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory)
     
     #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
     espec = models.EmceeSpec ( cl, wave, flux )
@@ -243,7 +244,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
                 print(f'{name} has already been shown to fail line detection tests')
                 continue
             row = parent.loc[name]
-            code = run (lr_filename, row, **kwargs )
+            code = run (lr_filename, row, dropbox_directory=dropbox_dir, **kwargs )
             if code > 0:
                 #print(f'{name} is missing meaningful line constraints')
                 continue
