@@ -289,7 +289,9 @@ class EmceeSpec ( object ):
         '''
         stddev = self.psample['stddev_emission']
         line_flux = self.psample[f'flux_{line_name}']
-        amplitude_pdf = sampling.pdf_product ( line_flux[0], line_flux[1], (np.sqrt(2.*np.pi)*stddev[0])**-1, stddev[1] ) 
+        xA,pA = sampling.upsample (*line_flux)
+        xB,pB = sampling.upsample ((np.sqrt(2.*np.pi)*stddev[0])**-1, stddev[1])
+        xs, amplitude_pdf = sampling.pdf_product ( xA,pA,xB,pB, return_midpts=True) 
         
         # \\ don't try to test detection of lines outside spectrum
         obswl = self.model.emission_lines[line_name]*(1. + self.model.z )
@@ -315,9 +317,9 @@ class EmceeSpec ( object ):
         # \\ "Probability that the amplitude is less than the likely range of the blank spectrum"
         # \\ Pr[blank>amplitude] = int Pr[blank>a|a]Pr[a] da
         # \\                     = int_-inf^inf int_~a^inf P_blank(a) da P_spec(~a) d~a 
-        mp_std = np.trapz(stddev[0]*stddev[1], stddev[0])
-        xs = line_flux[0]*(mp_std*np.sqrt(2.*np.pi))**-1
-        xs = np.linspace(*np.quantile(sampling.cross_then_flat ( line_flux[0], stddev[0] ),[0.,1.]), line_flux[0].size)
+        #mp_std = np.trapz(stddev[0]*stddev[1], stddev[0])
+        #xs = line_flux[0]*(mp_std*np.sqrt(2.*np.pi))**-1
+        #xs = np.linspace(*np.quantile(sampling.cross_then_flat ( line_flux[0], stddev[0] ),[0.,1.]), line_flux[0].size)
         pdf = np.array([ integrate.quad(blank_pdf, cx, np.inf)[0]*amplitude_pdf(cx) for cx in xs ])
         pblank = np.trapz(pdf,xs)
         if return_pdf:
