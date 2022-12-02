@@ -55,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument ( '--nobjects', '-N', action='store', default=0)
     parser.add_argument ( '--taskname', action='store', default='bayesianfitlines'  )
     parser.add_argument ( '--source', '-S', action='store', default='SBAM' )
+    parser.add_argument ( '--input', '-i', action='store', default='../local_data/SBAM/bayfit/' )
     #parser.add_argument ( '--nfig', action='store', default=10 )
     args = parser.parse_args ()
     #step = int(args.step)
