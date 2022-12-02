@@ -59,5 +59,5 @@ if __name__ == '__main__':
     #parser.add_argument ( '--nfig', action='store', default=10 )
     args = parser.parse_args ()
     #step = int(args.step)
-    build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source )
+    build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source, input=args.input )
     #build_dsqQ ( step, n_objects=int(args.nobjects) )
