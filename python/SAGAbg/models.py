@@ -291,10 +291,19 @@ class EmceeSpec ( object ):
         line_flux = self.psample[f'flux_{line_name}']
         amplitude_pdf = sampling.pdf_product ( line_flux[0], line_flux[1], (np.sqrt(2.*np.pi)*stddev[0])**-1, stddev[1] ) 
         
+        # \\ don't try to test detection of lines outside spectrum
+        obswl = self.model.emission_lines[line_name]*(1. + self.model.z )
+        if (obswl > self.wave.max()) or (obswl < self.wave.min()):
+            if return_pdf:
+                return np.NaN, (None,None)
+            else:
+                return np.NaN
+        
         # \\ pull blank spectrum near line
         _,in_window = get_lineblocs ( self.wave, z=self.model.z, lines=self.model.emission_lines[line_name] )
         in_any_line,_ = get_lineblocs ( self.wave, z=self.model.z, lines=list(self.model.emission_lines.values()) )        
-        blankflux = self.flux[in_window&~in_any_line]        
+        
+        blankflux = self.flux[in_window&~in_any_line]                
         blank_pdf = stats.gaussian_kde ( blankflux - np.median(blankflux), bw_method=sampling.wide_kdeBW(blankflux.size) )
         
         # \\ P[amplitude|blank] 
