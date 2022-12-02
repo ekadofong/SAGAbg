@@ -118,50 +118,42 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
     wave,flux = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
-    # \\ if AAT, flux calibration is not reliable past 8000 AA
-    if row['TELNAME'] == 'AAT':
-        wvmask = wave < 8000.
-        wave = wave[wvmask]
-        flux = flux[wvmask]
-    elif row['TELNAME'] == 'MMT':
-        wvmask = wave < 8200.
-        wave = wave[wvmask]
-        flux = flux[wvmask]        
-    else:
-        raise ValueError ('spectra from %s not flux calibrated' % row['TELNAME'])
     
     #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
     espec = models.EmceeSpec ( cl, wave, flux )
     espec.load_posterior ( lr_filename )
     
     # \\ require at least one weak OII & OIII line to be detected
-    # \\ where we define detection to be that the probability that
-    # \\ the 99th percentile of the
-    # \\ flux from the f_c uncertainty is <0.05 of the flux PDF
-    crucial_weaklines = [['[OIII]4363']]#,['[OII]7320','[OII]7330']]
+    # \\ where we define detection to be : see test_detection
+    crucial_weaklines = ['[OIII]4363','[OII]7320','[OII]7330']
     pblank = np.zeros(len(crucial_weaklines),dtype=float)
-    for idx,slot in enumerate(crucial_weaklines):
-        for line_name in slot:
-            tdet = espec.test_detection( line_name ) 
-            pblank[idx] = tdet
-            got_det = tdet <= detection_cutoff                        
-            if got_det:
-                if verbose == 'vv':
-                    print(f"+ Detection of {line_name} ({tdet:.4f})")
-                #is_detected[idx] = True
-            else:
-                if len(verbose) > 0:
-                    print(f"No detection of {line_name} ({tdet:.4f})")
+    #for idx,slot in enumerate(crucial_weaklines):
+    for idx,line_name in enumerate(crucial_weaklines):
+        tdet = espec.test_detection( line_name ) 
+        pblank[idx] = tdet
+        got_det = tdet <= detection_cutoff                        
+        if got_det:
+            if verbose == 'vv':
+                print(f"+ Detection of {line_name} ({tdet:.4f})")
+            #is_detected[idx] = True
+        else:
+            if len(verbose) > 0:
+                print(f"No detection of {line_name} ({tdet:.4f})")
                     
     is_detected = pblank <= detection_cutoff
-    bingpot = is_detected.all()
+    bingpot = is_detected.any() # \\ run if we can detect ANY weak line
     if not bingpot and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
+            
+        return_code = 3*10**len(crucial_weaklines)
+        for didx in range(len(is_detected)):
+            return_code += int(~is_detected[didx]) * 10**didx
+        return_code = int(return_code)
         if return_dataproducts:
-            return 30 + int(~is_detected[0]), None, None
+            return return_code,  None, None
         else:
-            return 30 + int(~is_detected[0])
+            return return_code
      
     la = temdenext.LineArray (fit_ne=fit_ne)
     la.load_observations(espec)
