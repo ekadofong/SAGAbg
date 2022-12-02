@@ -307,6 +307,14 @@ class LineArray (object):
             prediction[idx] = lr.predict ( temperature, ne, Av )
         return prediction
     
+    def TOII_campbell1986 (self, TOIII):
+        '''
+        [From Andrews+2013] "Campbell et al 1986 used the photoionization models
+        of Stasi'nska 1982 to derive a linear relation between the temperature
+        in [the TOII and TOIII] zones"
+        '''
+        return 0.7*TOIII + 3000.
+    
     def log_prior ( self, args ):
         if self.fit_ne:
             Toiii, Toii, ne, Av = args
@@ -334,8 +342,12 @@ class LineArray (object):
         
         lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * s_ne**2)**-1, m_ne, s_ne ))
         # \\ fuzzily enforce the T2-T3 relation
-        # \\ based off of the relation from remeasuring metallicities of Andrews+2013
-        lp += np.log(models.gaussian(Toii-Toiii, 'normalize', -2500., 1000.) )
+        # \\ based off of the relation from photoionization models
+        # \\ m = 0. (model prediction vs. observation)
+        # \\ s = 1500. K (based off of dispersion in galaxies w. OIII4363,OII7320,7330 detections)
+        toii_prediction = self.TOII_campbell1986 ( Toiii )
+        lp += np.log(models.gaussian(Toii - toii_prediction, 'normalize', 0., 1500.))
+        #lp += np.log(models.gaussian(Toii-Toiii, 'normalize', -2500., 1000.) )
         
         if not np.isfinite(lp):
             self.pcode = 3
