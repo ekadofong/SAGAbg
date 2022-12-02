@@ -109,6 +109,9 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
     for idx,pull in enumerate(np.random.randint ( 0, fchain.shape[0], npull )):
         cl.set_arguments ( fchain[pull] )
         for ax,key in zip(f_axarr, cl.emission_lines.keys()):
+            obswl = cl.emission_lines[key]*(1.+cl.z)
+            if (obswl<wave.min()) or (obswl>wave.max()):
+                continue
             inline,inbloc = line_fitting.get_lineblocs ( wave, z=cl.z, lines=cl.emission_lines[key], window_width=80)
             if idx==0: 
                 ax.errorbar(wave[inbloc], flux[inbloc],color='k',fmt='o', yerr=u_flux[inbloc],zorder=0, markersize=5 )

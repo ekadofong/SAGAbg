@@ -114,8 +114,6 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     '''
     Run inference
     '''
-    #z = sbam.loc[wid, 'SPEC_Z']
-    #fname = f'../local_data/SBAM/bayfit/{wid}/{wid}-chain.txt'
     z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
     wave,flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory)
@@ -151,7 +149,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         for didx in range(len(is_detected)):
             return_code += int(~is_detected[didx]) * 10**didx
         return_code = int(return_code)
-        if return_dataproducts:
+        if return_dataproducts:        
             return return_code,  None, None
         else:
             return return_code
@@ -177,6 +175,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     ndim = p0.shape[1]
     
     if setup_only:
+        print('Returning set-up only:')
         return la, p0     
     
     sampler = emcee.EnsembleSampler( nwalkers, ndim, la.log_prob, )
