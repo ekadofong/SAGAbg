@@ -66,3 +66,9 @@ def estimate_stellarmass (clean, distmod=None):
     clean['cm_logmstar'] = logml + (clean['oc_Mg']-5.11)/-2.5    
     return clean
     
+def get_index ( catalog, indices ):
+    x = np.where(np.in1d(catalog.index, indices))[0]
+    if len(x)==1:
+        return int(x)
+    else:
+        return x

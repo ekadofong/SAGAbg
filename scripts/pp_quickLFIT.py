@@ -30,5 +30,5 @@ def run (x,y,yerr, initial):
     sampler = emcee.EnsembleSampler(
         nwalkers, ndim, log_probability, args=(x, y, yerr)
     )
-    sampler.run_mcmc(pos, 5000, progress=True)
+    sampler.run_mcmc(pos, 1000, progress=True)
     return sampler    
