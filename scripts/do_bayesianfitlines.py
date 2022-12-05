@@ -131,12 +131,16 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
 
 def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=20000, nsave=5000,
              savefit=True, savefig=True, clobber=False, verbose=True, save_sampler=False, **kwargs ):
+    wid = row.name  
     if savedir is None:
-        savedir = '../local_data/SBAM/bayfit'    
+        savedir = '../local_data/SBAM/bayfit'   
+    # \\ split into subdirectories
+    savedir = f'{savedir}/{wid[:2]}/'
+     
     if dropbox_dir is None:
         dropbox_dir = '/Users/kadofong/Dropbox/SAGA'   
         
-    wid = row.name             
+               
     if (not clobber) and os.path.exists ( f'{savedir}/{wid}/model_parameters.txt'):
         if verbose:
             print(f'{wid} already run. Skipping...')
