@@ -395,8 +395,13 @@ class EmceeSpec ( object ):
         lp = np.log(gaussian(self.model.EW_abs, (np.sqrt(2.*np.pi) * ews**2)**-1, 0., ews))
             
         # \\ Gaussian prior on line wiggle    
+        wiggle_arr = self._values_to_arr(self.model.wiggle)
         wiggle_s = 0.3
-        lp += sum(np.log(gaussian(self._values_to_arr(self.model.wiggle), (np.sqrt(2.*np.pi) * wiggle_s**2)**-1, 0., wiggle_s)))
+        lp += sum(np.log(gaussian(wiggle_arr, (np.sqrt(2.*np.pi) * wiggle_s**2)**-1, 0., wiggle_s)))
+        # \\ but don't allow wiggle > 2 Angstrom
+        if (abs(wiggle_arr) > 2.).any():
+            return -np.inf
+        
         nii_doublet = 2.9421684623736297
         nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
         lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * (0.1*nii_doublet)**2)**-1, nii_doublet,  (0.1*nii_doublet)**2 ))
@@ -416,10 +421,14 @@ class EmceeSpec ( object ):
             if self.model.has_line('[OIII]4363'):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
         
-        # \\ for the SII and OII doublets, make a constraint on both sides
+        # \\ for the SII and OII lines, make a constraint on both sides
         if self.model.has_line('[SII]6717') and self.model.has_line('[SII]6731'):
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
+            
+        if self.model.has_line('[OII]7320') and self.model.has_line('[OII]7330'):
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7320']/self.model.amplitudes['[OII]7330'], 1.23 ))
+            lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7330']/self.model.amplitudes['[OII]7320'], 0.8 ))
             
         #if self.model.has_line('[OII]3727') and self.model.has_line('[OII]3729'):
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
