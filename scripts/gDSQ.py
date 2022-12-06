@@ -25,10 +25,8 @@ def build ( taskname, step, n_objects=0, source='SBAM', dropbox_directory=None, 
                    file=f
                    )
         
-def build_bayesianfitlines ( *args, **kwargs ):
-    build ( 'bayesianfitlines', *args, **kwargs )
 
-def dep_build_dsqQ ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
+def build_bayesianfitlines ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
     if dropbox_directory is None:
         dropbox_directory = '../local_data/'
     if n_objects==0:
