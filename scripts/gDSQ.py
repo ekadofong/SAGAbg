@@ -41,11 +41,11 @@ def dep_build_dsqQ ( step, n_objects=0, source='SBAM', dropbox_directory=None ):
             
         n_objects = df.shape[0]
     
-    with open('./dsq_fitlines.txt', 'w') as f:
+    with open('./DSQbayesianfitlines.txt', 'w') as f:
         for start_index in range(0, n_objects, step):
             end_index = min ( start_index + step, n_objects )
             #print(start_index, end_index )
-            print ( "python do_bayesianfitlines.py -S %i -E %i -d %s --source SBAMsat --nfig 100" %\
+            print ( "python do_bayesianfitlines.py -S %i -E %i -d %s --source SBAM --nfig 10 --serial" %\
                         (start_index, end_index, dropbox_directory), file=f)
         
         
@@ -60,6 +60,8 @@ if __name__ == '__main__':
     #parser.add_argument ( '--nfig', action='store', default=10 )
     args = parser.parse_args ()
     #step = int(args.step)
+    if args.taskname == 'bayesianfitlines':
+        build_bayesianfitlines ( int(args.step),  n_objects=int(args.nobjects), source=args.source, )
     build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source, input=args.input,)
             #dropbox_directory=args.dropbox_directory )
     #build_dsqQ ( step, n_objects=int(args.nobjects) )
