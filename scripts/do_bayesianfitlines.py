@@ -141,7 +141,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
         dropbox_dir = '/Users/kadofong/Dropbox/SAGA'   
         
                
-    if (not clobber) and os.path.exists ( f'{savedir}/{wid}/model_parameters.txt'):
+    if (not clobber) and os.path.exists ( f'{savedir}/{wid}/{wid}-bfit.npz'):
         if verbose:
             print(f'{wid} already run. Skipping...')
         return None, None
