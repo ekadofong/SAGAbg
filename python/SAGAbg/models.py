@@ -264,14 +264,17 @@ class EmceeSpec ( object ):
         self.lineratio_eps = lineratio_eps
         self.pcode = 0
         
-    def load_posterior ( self, fname, sample_fluxes=True, nsample=1000):
+    def load_posterior ( self, fname, sample_fluxes=True, nsample=1000, sparse=True):
         gkde_d = {}
         with np.load ( fname ) as npz:
             for key in npz.keys():
+                if sparse:
+                    if ('wiggle' in key):
+                        continue
                 if ('flux' in key):
                     element = key.split('_')[1]
                     if element not in self.model.emission_lines.keys():
-                        continue
+                        continue                
                 gkde_d[key] = npz[key]
         self.psample = gkde_d
         
@@ -455,3 +458,11 @@ class EmceeSpec ( object ):
             return -np.inf
         
         return lprior + self.log_likelihood ( )
+    
+    def map_estimate ( self, linename ):
+        '''
+        Get max a posteriori estimate of a line
+        '''
+        flux = self.psample[f'flux_{linename}']
+        mlp = np.trapz(flux[0]*flux[1],flux[0])
+        return mlp
