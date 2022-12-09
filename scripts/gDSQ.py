@@ -60,6 +60,7 @@ if __name__ == '__main__':
     #step = int(args.step)
     print(args.taskname)
     if args.taskname == 'bayesianfitlines':
+        print(f'divert due to task: {args.taskname}')
         build_bayesianfitlines ( int(args.step),  n_objects=int(args.nobjects), source=args.source, )
     build ( args.taskname, int(args.step), n_objects=int(args.nobjects), source=args.source, input=args.input,)
             #dropbox_directory=args.dropbox_directory )
