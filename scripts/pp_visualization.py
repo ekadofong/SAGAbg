@@ -34,7 +34,7 @@ def chain_from_kde ( kde_npz, npull=5000 ):
     return fchain, elines
 
 def afterburner_viz ( row, fchain, emission_lines ):    
-    wave,flux = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
+    wave,flux,_ = logistics.do_fluxcalibrate ( row, tdict, '/Users/kadofong/Dropbox/SAGA/')
     cl = models.CoordinatedLines ( z=row['SPEC_Z'], emission_lines=emission_lines )
     u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     do_bayesianfitlines.qaviz(wave,flux,u_flux, fchain, cl)
