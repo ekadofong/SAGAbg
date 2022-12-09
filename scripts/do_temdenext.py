@@ -53,7 +53,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
                     '[OIII]':('O',3)}    
     lines_d = {'[OIII]':['[OIII]5007'], '[OII]':['[OII]3729']} 
     if not la.fit_ne:
-        ne = 100. # XXX fix density?         
+        ne = 100. # XXX fix density?        
     
     # \\ establish baseline H indicator
     betaindex = la.espec.model.get_line_index('Hbeta')
@@ -141,9 +141,9 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         else:
             if len(verbose) > 0:
                 print(f"No detection of {line_name} ({tdet:.4f})")
-        if not got_det and line_name in line_db.remove_if_nodetect:
-            print(f'deleting {line_name}')
-            del espec.psample[f'flux_{line_name}']
+        #if not got_det and line_name in line_db.remove_if_nodetect:
+        #    print(f'deleting {line_name}')
+        #    del espec.psample[f'flux_{line_name}']
                     
     is_detected = pblank <= detection_cutoff
     bingpot = is_detected[0] or (is_detected[1] and is_detected[2]) # \\ XXX require either OIII or both OII

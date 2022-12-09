@@ -19,8 +19,8 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_G
     if len(flux) == 0:
         return None, None
     finite_mask = np.isfinite(flux)
-    flux = flux[finite_mask]
-    wave = wave[finite_mask]
+    flux = flux[finite_mask].astype(float)
+    wave = wave[finite_mask].astype(float)
 
     _, qfactors = line_fitting.flux_calibrate( wave, flux, obj, tdict )
     
@@ -62,7 +62,7 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_G
         fluxcal *= gecorr
         
             
-    return wave.astype(float), fluxcal.astype(float), qcalibration  
+    return wave, fluxcal, qcalibration  
 
 def check_fluxcalibration ( wave, flux, window=500, break_window=30, kernel_kwargs=None ):
     if kernel_kwargs is None:
@@ -79,6 +79,13 @@ def check_fluxcalibration ( wave, flux, window=500, break_window=30, kernel_kwar
     quantile = sampling.get_quantile_of_value ( dev, break_val )
     return quantile
 
+def ge_of_photometry ( objname, filter_name, filter_dir='../local_data/filter_curves/decam/'):
+    transmission = np.loadtxt(f'{filter_dir}/CTIO_DECam.{filter_name}.dat')
+    filter_pdf = transmission[:,1]/np.trapz(transmission[:,1],transmission[:,0])
+    Alambda = temdenext.gecorrection ( transmission[:,0], ge.loc[objname, 'AV_SandF'], return_magcorr=True )
+    ge_ev = np.trapz(filter_pdf*Alambda, transmission[:,0] ) # expected value of galactic extinction correction
+    return ge_ev
+    
 
 def spectrum_kernel ( size=10, type='gaussian' ):
     xs = np.arange(-50,51)
@@ -135,3 +142,4 @@ def load_gamaspec ( gamaspec ):
     wave = wave[finite_mask] 
     var = var[finite_mask]
     return wave, flux, var  
+

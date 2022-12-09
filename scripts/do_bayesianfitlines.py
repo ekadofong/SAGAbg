@@ -150,7 +150,7 @@ def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=2
         os.makedirs(f'{savedir}/{wid}/')
         
     z = row['SPEC_Z']
-    wave, flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
+    wave, flux, _ = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
     if save_sampler:
         sampler_backend = f'{savedir}/{wid}/{wid}-backend.h5'
     else:

@@ -38,7 +38,7 @@ def build_SBAM (*args, **kwargs):
     '''
     clean = build_saga_catalog ( *args, **kwargs ).to_pandas ()
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
-    subset['number'] = np.arange(subset.shape[0])
+    
     return subset
 
 def build_SBAMz (*args, **kwargs):

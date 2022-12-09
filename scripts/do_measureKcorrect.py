@@ -5,7 +5,7 @@ from SAGAbg import line_fitting
 import catalogs, logistics
 
 def dowork ( obj, tdict, dropbox_dir ):
-    wv, calibrated_spectrum = logistics.do_fluxcalibrate (obj, tdict, dropbox_dir)
+    wv, calibrated_spectrum, _ = logistics.do_fluxcalibrate (obj, tdict, dropbox_dir)
     if calibrated_spectrum is None:
         return np.NaN, np.NaN
     kcorrections = np.zeros(2)
