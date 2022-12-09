@@ -1,10 +1,20 @@
 import requests
 import numpy as np
-from SAGAbg import line_fitting, SAGA_get_spectra
+import pandas as pd
+from ekfstats import sampling
+from SAGAbg import line_fitting, SAGA_get_spectra, models, temdenext
 
+ge_filename = '../local_data/galactic_extinction/output/extinction_formatted.csv'
+ge = pd.read_csv(ge_filename, index_col=0)
 AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
 
-def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True):
+def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_GEcorrection=True ):
+    '''
+    Calibration quality:
+    0 : not well-calibrated
+    1 : well-calibrated (AAT)
+    2 : MMT (no break)
+    '''
     flux, wave, _, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
     if len(flux) == 0:
         return None, None
@@ -31,8 +41,53 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True):
             fluxcal = fluxcal[wvmask]        
         else:
             raise ValueError ('spectra from %s not flux calibrated' % obj['TELNAME'])
+        
+    if obj['TELNAME'] == 'AAT':
+        break_quantile = check_fluxcalibration ( wave, fluxcal, )        
+        if (break_quantile < alpha) or (break_quantile > (1.-alpha)):
+            qcalibration = 0
+        else:
+            qcalibration = 1
+        #print(f'{break_quantile} ({qcalibration})')
+    elif obj['TELNAME'] == 'MMT':
+        qcalibration = 2
+        
+    # \\ apply galactic extinction correction
+    if apply_GEcorrection:
+        #idx = obj['number']
+        #ge = pd.read_csv('../local_data/galactic_extinction/output/extinction_formatted.csv', skiprows = lambda x: 0<x<idx+1, 
+        #                 index_col=0, nrows=1)
+        Av = ge.loc[obj.name, 'AV_SandF'] 
+        gecorr = temdenext.gecorrection (wave, Av,)
+        fluxcal *= gecorr
+        
             
-    return wave, fluxcal    
+    return wave.astype(float), fluxcal.astype(float), qcalibration  
+
+def check_fluxcalibration ( wave, flux, window=500, break_window=30, kernel_kwargs=None ):
+    if kernel_kwargs is None:
+        kernel_kwargs = {}
+    kernel = spectrum_kernel ( **kernel_kwargs )
+    
+    blu = ((AAT_BREAK - window) < wave)&(wave < (AAT_BREAK - break_window ))
+    red = ((AAT_BREAK + window) > wave)&(wave > (AAT_BREAK + break_window ))
+    
+    blu_dev = flux[blu] - np.convolve(flux, kernel, mode='same')[blu]
+    red_dev = flux[red] - np.convolve(flux, kernel, mode='same')[red]
+    dev = np.concatenate([blu_dev, red_dev])
+    break_val = np.median(flux[blu]) - np.median(flux[red])
+    quantile = sampling.get_quantile_of_value ( dev, break_val )
+    return quantile
+
+
+def spectrum_kernel ( size=10, type='gaussian' ):
+    xs = np.arange(-50,51)
+    if type == 'gaussian':
+        kernel = models.gaussian ( xs, 'normalize', 0., size )
+    elif type == 'tophat':
+        kernel = np.ones(size)
+        kernel /= kernel.sum()
+    return kernel
 
 def load_filters ( filterset='DECam' ):
     if filterset=='DECam':

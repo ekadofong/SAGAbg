@@ -16,6 +16,7 @@ def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users
 
     base = saga.object_catalog.load_combined_base_catalog()
     base['wordid'] = names[:,1]
+    
     #base = saga.host_catalog.construct_host_query("paper3").filter(base)
     
     cleaner = (base['REMOVE']==0)&base['is_galaxy']&(base['g_mag']<30.)&(base['r_mag']<30.)#&(base['ZQUALITY']>=3)
@@ -37,6 +38,7 @@ def build_SBAM (*args, **kwargs):
     '''
     clean = build_saga_catalog ( *args, **kwargs ).to_pandas ()
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
+    subset['number'] = np.arange(subset.shape[0])
     return subset
 
 def build_SBAMz (*args, **kwargs):
@@ -67,7 +69,11 @@ def estimate_stellarmass (clean, distmod=None):
     return clean
     
 def get_index ( catalog, indices ):
-    x = np.where(np.in1d(catalog.index, indices))[0]
+    if hasattr(catalog, 'index'):
+        index = catalog.index
+    else:
+        index = catalog
+    x = np.where(np.in1d(index, indices))[0]
     if len(x)==1:
         return int(x)
     else:

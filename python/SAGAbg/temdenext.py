@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import gaussian_kde
 from scipy import integrate
 import pyneb as pn
+import extinction
 from ekfstats import sampling
 from . import line_db, models
 
@@ -21,24 +22,36 @@ def calzetti00 ( wave, unit='AA' ):
     if unit == 'AA':
         conversion = 1e-4
     if isinstance( wave, float) or isinstance(wave, int):
-        if wave >= 6300:
+        wave = wave*conversion
+        if wave >= 6300/1e4:
             return b0 * (c_red[0] + c_red[1]/wave) #+ Rv
-        elif wave < 6300:
+        elif wave < 6300/1e4:
             return b0 * (c_blue[0] + c_blue[1]/wave + c_blue[2]/wave**2 + c_blue[3]/wave**3)
         
     # \\ otherwise do array math
     klambda = np.zeros_like(wave)
     wv_red = wave[wave>=6300.] * conversion
-    klambda[wave >= 6300.] = b0 * (c_red[0] + c_red[1]/wv_red) #+ Rv
+    klambda[wave >= 6300.] = b0 * (c_red[0] + c_red[1]/wv_red) #+ Rvm
     wv_blu = wave[wave<6300.] * conversion
     klambda[wave < 6300.] = b0 * (c_blue[0] + c_blue[1]/wv_blu + c_blue[2]/wv_blu**2 + c_blue[3]/wv_blu**3) #+ Rv
     return klambda
 
+def gecorrection ( wave, Av, Rv=3.1, unit='AA', return_magcorr=False ):
+    Alambda = extinction.ccm89 ( wave, Av, Rv, unit=unit.lower() )
+    if return_magcorr:
+        return Alambda
+    else:
+        corr = 10.**(0.4*Alambda)
+        return corr 
+
 def extinction_correction (wl, flux, Av, Rv=4.05, return_magcorr=False):
-    magcorr = Av * ( calzetti00(wl)/Rv + 1.)
+    '''
+    Remove the effect of extinction (Calzetti, extragalactic)
+    '''
+    Alambda = Av * ( calzetti00(wl)/Rv + 1.)
     if return_magcorr:
         return magcorr
-    corr = 10.**(-0.4 * magcorr)
+    corr = 10.**( Alambda / 2.5 )
     return corr * flux
 
 # fit from Kado-Fong+2022
@@ -85,7 +98,7 @@ class LineRatio ( object ):
             # \\ for line ratios together are also close in wavelength space.TODO: generalize
         kdiff = k0 - k1
 
-        corr = 10.**(0.4*ebv*kdiff)
+        corr = 10.**(-0.4*ebv*kdiff)
         
         return corr    
     
@@ -315,6 +328,12 @@ class LineArray (object):
         '''
         return 0.7*TOIII + 3000.
     
+    def TOII_pagel ( self, TOIII ):
+        '''
+        T2-T3 relation from photoionization models, see Berg et al. 2012
+        '''
+        return 2. * ((TOIII/1e4)**-1 + 0.8)**-1 * 1e4    
+    
     def log_prior ( self, args ):
         if self.fit_ne:
             Toiii, Toii, ne, Av = args
@@ -345,7 +364,7 @@ class LineArray (object):
         # \\ based off of the relation from photoionization models
         # \\ m = 0. (model prediction vs. observation)
         # \\ s = 1500. K (based off of dispersion in galaxies w. OIII4363,OII7320,7330 detections)
-        toii_prediction = self.TOII_campbell1986 ( Toiii )
+        toii_prediction = self.TOII_pagel ( Toiii )
         lp += np.log(models.gaussian(Toii - toii_prediction, 'normalize', 0., 1500.))
         #lp += np.log(models.gaussian(Toii-Toiii, 'normalize', -2500., 1000.) )
         
