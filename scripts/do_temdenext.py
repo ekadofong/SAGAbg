@@ -7,7 +7,7 @@ from astropy import cosmology
 #import pandas as pd
 import emcee
 import pyneb as pn
-from SAGAbg import models, temdenext
+from SAGAbg import models, temdenext, line_db
 
 import catalogs
 import logistics
@@ -116,7 +116,10 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     '''
     z=row['SPEC_Z']
     cl = models.CoordinatedLines (z=z)
-    wave,flux = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory)
+    wave,flux,qC = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory)
+    if qC == 0:
+        print('Flux calibration failed; skipping')
+        return 1
     
     #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
     espec = models.EmceeSpec ( cl, wave, flux )
@@ -130,7 +133,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     for idx,line_name in enumerate(crucial_weaklines):
         tdet = espec.test_detection( line_name ) 
         pblank[idx] = tdet
-        got_det = tdet <= detection_cutoff                        
+        got_det = tdet <= detection_cutoff                         
         if got_det:
             if verbose == 'vv':
                 print(f"+ Detection of {line_name} ({tdet:.4f})")
@@ -138,9 +141,13 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         else:
             if len(verbose) > 0:
                 print(f"No detection of {line_name} ({tdet:.4f})")
+        if not got_det and line_name in line_db.remove_if_nodetect:
+            print(f'deleting {line_name}')
+            del espec.psample[f'flux_{line_name}']
                     
     is_detected = pblank <= detection_cutoff
-    bingpot = is_detected.any() # \\ run if we can detect ANY weak line
+    bingpot = is_detected[0] or (is_detected[1] and is_detected[2]) # \\ XXX require either OIII or both OII
+    # \\ run if we can detect ANY weak line
     if not bingpot and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
@@ -219,6 +226,10 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
         Mr = sbam['r_mag'] - distmod - kcorr['K_r']
         Mg = sbam['g_mag'] - distmod - kcorr['K_g']
         logmstar = temdenext.CM_msun ( Mg, Mr )
+    elif source == 'custom':
+        names = open('/Users/kadofong/Downloads/names.txt','r').read().splitlines()
+        parent = catalogs.build_SBAM ( dropbox_directory=dropbox_dir )
+        parent = parent.reindex(names)
         
     # \\ identify objects with line ratio measurements
     #run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*bfit.npz' % inputdir)]    
@@ -232,7 +243,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             print(f'beginning {name}')        
             start = time.time ()
         try:
-            lr_filename = f'{inputdir}/{name}/{name}-bfit.npz'
+            lr_filename = f'{inputdir}/{name[:2]}/{name}/{name}-bfit.npz'
             if not os.path.exists ( lr_filename ):
                 print(f'{name} does not have line fit data. Skipping! ')
                 continue
