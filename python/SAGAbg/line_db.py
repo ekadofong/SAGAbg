@@ -54,3 +54,7 @@ BALMER_ABSORPTION = ['Halpha','Hbeta','Hgamma','Hdelta']
 ## DEFAULT VALUES
 DEFAULT_WINDOW_WIDTH = 140.
 DEFAULT_LINE_WIDTH = 14.
+
+## Lines to remove if they are not detected
+## Since there is a lot of correlated noise in the area
+remove_if_nodetect = ['[OII]7320', '[OII]7330']
