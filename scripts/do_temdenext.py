@@ -153,7 +153,7 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     with open(lr_filename.replace('bfit.npz','det.txt'), 'w') as f:
         print(pblank, file=f)
     # \\ run if we can detect ANY weak line
-    if not bingpot and require_detections:
+    if (not bingpot) and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
             
@@ -290,9 +290,9 @@ if __name__ == '__main__':
     parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
                           help='path to directory with SAGA spectra')
     parser.add_argument ( '--delicate', action='store_true')
-    parser.add_argument ( '--require_detections', action='store_true')
+    parser.add_argument ( '--run_all', action='store_true')
     #parser.add_argument ( '--mpi', action='store_true' )
     args = parser.parse_args ()
     
     main ( args.input, args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source, barge=not bool(args.delicate),
-           clobber=bool(args.clobber), require_detections=bool(args.require_detections))# multiprocess=args.mpi ) 
+           clobber=bool(args.clobber), require_detections=not bool(args.run_all))# multiprocess=args.mpi ) 
