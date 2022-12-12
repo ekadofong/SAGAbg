@@ -108,7 +108,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=True,
+def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=False,
          dropbox_directory=None,
          return_dataproducts=False, detection_cutoff=0.05, verbose='vv', setup_only=False):
     '''
@@ -131,6 +131,9 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     pblank = np.zeros(len(crucial_weaklines),dtype=float)
     #for idx,slot in enumerate(crucial_weaklines):
     for idx,line_name in enumerate(crucial_weaklines):
+        if f'flux_{line_name}' not in espec.psample.keys():
+            pblank[idx] = np.NaN
+            continue
         tdet = espec.test_detection( line_name ) 
         pblank[idx] = tdet
         got_det = tdet <= detection_cutoff                         
@@ -147,6 +150,8 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
                     
     is_detected = pblank <= detection_cutoff
     bingpot = is_detected[0] or (is_detected[1] and is_detected[2]) # \\ XXX require either OIII or both OII
+    with open(lr_filename.replace('bfit.npz','det.txt'), 'w') as f:
+        print(pblank, file=f)
     # \\ run if we can detect ANY weak line
     if not bingpot and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
@@ -206,11 +211,12 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         return 0 
 
 
-def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, verbose=True, **kwargs):
+def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detections=True, 
+          clobber=False, verbose=True, barge=True, **kwargs):
     '''
     Infer Te, ne, and Av of the galaxy spectrum
     based off of MCMC-inferred line ratios
-    '''
+    '''    
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
     elif source == 'SBAMz':
@@ -250,7 +256,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             if os.path.exists(lr_filename.replace('bfit.npz','abundances.txt')) and not clobber:
                 print(f'{name} already run. Skipping...')
                 continue
-            elif os.path.exists(lr_filename.replace('bfit.npz', 'flag')) and not clobber:
+            elif os.path.exists(lr_filename.replace('bfit.npz', 'flag')) and not clobber and require_detections:
                 print(f'{name} has already been shown to fail line detection tests')
                 continue
             row = parent.loc[name]
@@ -258,9 +264,12 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', clobber=False, 
             if code > 0:
                 #print(f'{name} is missing meaningful line constraints')
                 continue
-        except Exception as e:
-            print(f'{name} failed: {e}')
-            continue
+        except Exception as e: 
+            if barge:           
+                print(f'{name} failed: {e}')
+                continue
+            else:
+                raise Exception ( e )
         
         if verbose:
             elapsed = time.time () - start
@@ -280,8 +289,10 @@ if __name__ == '__main__':
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
     parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
                           help='path to directory with SAGA spectra')
+    parser.add_argument ( '--delicate', action='store_true')
+    parser.add_argument ( '--require_detections', action='store_true')
     #parser.add_argument ( '--mpi', action='store_true' )
     args = parser.parse_args ()
     
-    main ( args.input, args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source,
-           clobber=args.clobber,)# multiprocess=args.mpi ) 
+    main ( args.input, args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source, barge=not bool(args.delicate),
+           clobber=bool(args.clobber), require_detections=bool(args.require_detections))# multiprocess=args.mpi ) 
