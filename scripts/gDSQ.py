@@ -21,7 +21,7 @@ def build ( taskname, step, n_objects=0, source='SBAM', dropbox_directory=None, 
             end_index = min ( start_index + step, n_objects )
             #print(start_index, end_index )            
             print ( 
-                   f"python do_{taskname}.py -S %i -E %i -d %s %s" % (start_index, end_index, dropbox_directory, kwarg_string), 
+                   f"python do_{taskname}.py -S %i -E %i --source %s -d %s %s" % (start_index, end_index, source, dropbox_directory, kwarg_string), 
                    file=f
                    )
         
