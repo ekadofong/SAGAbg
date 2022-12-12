@@ -260,7 +260,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detecti
                 print(f'{name} has already been shown to fail line detection tests')
                 continue
             row = parent.loc[name]
-            code = run (lr_filename, row, dropbox_directory=dropbox_dir, **kwargs )
+            code = run (lr_filename, row, dropbox_directory=dropbox_dir, require_detections=require_detections, **kwargs )
             if code > 0:
                 #print(f'{name} is missing meaningful line constraints')
                 continue
