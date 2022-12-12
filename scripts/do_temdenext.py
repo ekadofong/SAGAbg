@@ -108,7 +108,7 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=False,
+def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=True,
          dropbox_directory=None,
          return_dataproducts=False, detection_cutoff=0.05, verbose='vv', setup_only=False):
     '''
