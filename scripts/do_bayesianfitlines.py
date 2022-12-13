@@ -208,20 +208,26 @@ def approximate_kde ( cl, fchain, npts=100, covering_factor=1.5 ):
 
         
     
-def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', **kwargs):
+def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', wid=None, **kwargs):
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
     elif source == 'SBAMsat':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
         parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
     
-    if end == -1:
-        step = (parent.shape[0] - start) // nfig
-        end = None
-    else:
-        step = (end - start) // nfig
-    if step < 1:
+    if wid is not None:
+        start = catalogs.get_index ( parent, wid )
+        end = start + 1
         step = 1
+        print(f'{wid} -> {start}')
+    else:
+        if end == -1:
+            step = (parent.shape[0] - start) // nfig
+            end = None
+        else:
+            step = (end - start) // nfig
+        if step < 1:
+            step = 1
     
     fulltime = time.time ()
     for idx,(name, row) in enumerate(parent.iloc[start:end].iterrows ()):
@@ -260,7 +266,9 @@ if __name__ == '__main__':
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
     parser.add_argument ( '--serial', action='store_true' )
     parser.add_argument ( '--nsteps', action='store', default=20000 )
+    parser.add_argument ( '--wid', action='store', default=None)
     args = parser.parse_args ()
+    
     
     main ( args.dropbox_directory, 
            nfig=int(args.nfig), 
@@ -269,5 +277,6 @@ if __name__ == '__main__':
            source=args.source,
            savedir=args.savedir,
            clobber=args.clobber, 
+           wid = args.wid,
            multiprocess=not args.serial, 
            nsteps=int(args.nsteps) ) 
