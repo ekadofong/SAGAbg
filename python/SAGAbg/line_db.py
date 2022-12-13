@@ -26,21 +26,19 @@ line_ratios = [
 
 # \\ testing to see if we make an improvement over theoretical limits with
 # \\ resulting constraints on the observed line ratio
-line_ratio_theorymax = [ 
-                        100.,   #\\ Ha/Hb
-                        1.46,   #\\ SII6716/SII6731 
+line_ratio_theorymax = { 
                         #0.493,  #\\ NII5755/6548
-                        0.0456, #\\ OII7330/3729+3727
-                        0.0564, #\\ OII7320/3729+3727
-                        0.160,  #\\ OIII4363/5007
-                        ]
-line_ratio_theorymin = [
-                        0.,
-                        0.685,
-                        0.,
-                        0.,
-                        0.
-                        ]
+                        '[OII]7330':0.0456, #\\ OII7330/3729+3727
+                        '[OII]7320':0.0564, #\\ OII7320/3729+3727
+                        '[OIII]4363':0.160,  #\\ OIII4363/5007
+}
+#line_ratio_theorymin = [
+#                        0.,
+#                        0.685,
+#                        0.,
+#                        0.,
+#                        0.
+#                        ]
 
 line_lists = [balmer_wavelengths, OIII_wavelengths, OII_wavelengths, SII_wavelengths, NII_wavelengths, FeX]
 line_wavelengths = {}
@@ -57,4 +55,4 @@ DEFAULT_LINE_WIDTH = 14.
 
 ## Lines to remove if they are not detected
 ## Since there is a lot of correlated noise in the area
-remove_if_nodetect = ['[OII]7320', '[OII]7330']
+remove_if_exceeds = ['[OII]7320', '[OII]7330']
