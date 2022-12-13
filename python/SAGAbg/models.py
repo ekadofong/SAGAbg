@@ -284,8 +284,32 @@ class EmceeSpec ( object ):
             self.obs_fluxes = np.zeros([nsample, self.model.n_emission])
             for idx,fkey in enumerate(flux_keys):
                 self.obs_fluxes[:,idx] = sampling.rejection_sample_fromarray (*self.psample[fkey], nsamp=nsample)
+                
+    def test_detection ( self, line_name, return_pdfs=False ):
+        stddev = self.psample['stddev_emission']
+        line_flux = self.psample[f'flux_{line_name}']
+        fluxes = sampling.rejection_sample_fromarray ( line_flux[0], line_flux[1] )
+        stddevs = sampling.rejection_sample_fromarray( stddev[0], stddev[1])                
+        amplitudes = (np.sqrt(2.*np.pi)*stddevs)**-1 * fluxes
+        
+        # \\ pull blank spectrum near line
+        _,in_window = get_lineblocs ( self.wave, z=self.model.z, lines=self.model.emission_lines[line_name] )
+        in_any_line,_ = get_lineblocs ( self.wave, z=self.model.z, lines=list(self.model.emission_lines.values()) )        
+        
+        blankflux = self.flux[in_window&~in_any_line]                
+        blanks = np.random.choice ( abs(blankflux - np.median(blankflux)), size=amplitudes.size, replace=True )
+        
+        # Probability that the fitted line amplitude is below the blank spectrum
+        pblank = 1. - (amplitudes > blanks).sum() / amplitudes.size
+        if return_pdfs:
+            return pblank, (amplitudes, blanks)
+        else:
+            return pblank
+        
+        
+           
 
-    def test_detection (self, line_name, return_pdf=False ):
+    def test_detection_bp (self, line_name, return_pdf=False ):
         '''
         What is the probability of producing the output line amplitude if the "line" were
         drawn from the surrounding "blank" spectrum? I.e. Pr = \int p[amplitude|blank] damplitude
@@ -399,10 +423,10 @@ class EmceeSpec ( object ):
             
         # \\ Gaussian prior on line wiggle    
         wiggle_arr = self._values_to_arr(self.model.wiggle)
-        wiggle_s = 0.3
+        wiggle_s = 0.1
         lp += sum(np.log(gaussian(wiggle_arr, (np.sqrt(2.*np.pi) * wiggle_s**2)**-1, 0., wiggle_s)))
         # \\ but don't allow wiggle > 2 Angstrom
-        if (abs(wiggle_arr) > 2.).any():
+        if (abs(wiggle_arr) > 0.5).any():
             return -np.inf
         
         nii_doublet = 2.9421684623736297
