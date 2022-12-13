@@ -161,11 +161,9 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         else:
             if len(verbose) > 0:
                 print(f"No detection of {line_name} ({tdet:.4f})")
-                
-
-                    
+              
     is_detected = pblank <= detection_cutoff
-    bingpot = is_detected[0] # \\ XXX require OIII4363
+    bingpot = is_detected[0] or (is_detected[1] and is_detected[2])  # \\ XXX require OIII4363
     with open(lr_filename.replace('bfit.npz','det.txt'), 'w') as f:
         print(pblank, file=f)
     # \\ run if we can detect ANY weak line
