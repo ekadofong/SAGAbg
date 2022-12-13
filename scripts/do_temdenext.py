@@ -125,9 +125,26 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
     espec = models.EmceeSpec ( cl, wave, flux )
     espec.load_posterior ( lr_filename )
     
+    # \\ delete red lines if they exceed max theoretical line ratio
+    for line_name in line_db.remove_if_exceeds:
+        if f'flux_{line_name}' not in espec.psample.keys():
+            continue
+        elif 'flux_[OII]3729' not in espec.psample.keys():
+            print(f'deleting {line_name} - no strong line coverage')
+            del espec.psample[f'flux_{line_name}'] 
+            continue
+        
+        val = espec.psample[f'flux_{line_name}']
+        num = np.trapz(val[0]*val[1],val[0])
+        val = espec.psample['flux_[OII]3729']
+        den = np.trapz(val[0]*val[1],val[0])
+        if num/den > line_db.line_ratio_theorymax[line_name]:            
+            print(f'deleting {line_name} due to unphysical line constraints (likely artifact)')
+            del espec.psample[f'flux_{line_name}']    
+    
     # \\ require at least one weak OII & OIII line to be detected
     # \\ where we define detection to be : see test_detection
-    crucial_weaklines = ['[OIII]4363','[OII]7320','[OII]7330']
+    crucial_weaklines = ['[OIII]4363', '[OII]7320', '[OII]7330']
     pblank = np.zeros(len(crucial_weaklines),dtype=float)
     #for idx,slot in enumerate(crucial_weaklines):
     for idx,line_name in enumerate(crucial_weaklines):
@@ -144,15 +161,15 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         else:
             if len(verbose) > 0:
                 print(f"No detection of {line_name} ({tdet:.4f})")
-        #if not got_det and line_name in line_db.remove_if_nodetect:
-        #    print(f'deleting {line_name}')
-        #    del espec.psample[f'flux_{line_name}']
+                
+
                     
     is_detected = pblank <= detection_cutoff
-    bingpot = is_detected[0] or (is_detected[1] and is_detected[2]) # \\ XXX require either OIII or both OII
+    bingpot = is_detected[0] # \\ XXX require OIII4363
     with open(lr_filename.replace('bfit.npz','det.txt'), 'w') as f:
         print(pblank, file=f)
     # \\ run if we can detect ANY weak line
+
     if (not bingpot) and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
@@ -161,7 +178,9 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
         for didx in range(len(is_detected)):
             return_code += int(~is_detected[didx]) * 10**didx
         return_code = int(return_code)
-        if return_dataproducts:        
+        if setup_only:
+            return return_code, None
+        elif return_dataproducts:        
             return return_code,  None, None
         else:
             return return_code
