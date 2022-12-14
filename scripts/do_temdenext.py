@@ -7,11 +7,21 @@ from astropy import cosmology
 #import pandas as pd
 import emcee
 import pyneb as pn
+from ekfstats import sampling
 from SAGAbg import models, temdenext, line_db
 
 import catalogs
 import logistics
 tdict = logistics.load_filters()
+
+# # # #
+# \\ set up OIII 4363 ratio
+O3 = pn.Atom('O',3)
+tem_arr = np.logspace(3,7,100)
+lrmod = O3.getEmissivity(tem_arr, 1e2, *O3.getTransition(4363.))
+lrmod /= O3.getEmissivity(tem_arr, 1e2, *O3.getTransition(5007.))
+interesting_limit = np.interp(2e4, tem_arr, lrmod)
+# # # #
 
 def setup_run (lineratio_arrays, nwalkers, 
                Tlow=7000., Thigh=20000.,
@@ -164,10 +174,22 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
               
     is_detected = pblank <= detection_cutoff
     bingpot = is_detected[0] or (is_detected[1] and is_detected[2])  # \\ XXX require OIII4363
+    # \\ also run if the 4363 line ratio is better than the line ratio max
+    # \\ at T(OIII)=20,000K
+    if not bingpot:
+        weak = sampling.rejection_sample_fromarray ( *espec.psample['flux_[OIII]4363'] )
+        strong = sampling.rejection_sample_fromarray ( *espec.psample['flux_[OIII]5007'] )
+        lrsamp = weak/strong
+        #lrlim = np.quantile ( lrsamp, 0.95 )
+        line_constraint = sampling.get_quantile_of_value(lrsamp, interesting_limit)
+        if line_constraint > 0.95:
+            bingpot = True
+    
     with open(lr_filename.replace('bfit.npz','det.txt'), 'w') as f:
         print(pblank, file=f)
-    # \\ run if we can detect ANY weak line
-
+        
+    # \\ run if we can detect ANY weak line OR if we get an interesting constraint off the
+    # \\ upper limit on the line ratio
     if (not bingpot) and require_detections:
         with open(lr_filename.replace('bfit.npz', 'flag'), 'w') as f:
             print('failed line detection test', file=f)
