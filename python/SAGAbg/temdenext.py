@@ -173,30 +173,53 @@ class LineArray (object):
             flux_pulls = np.random.normal(flux, u_flux, npull)
             self.espec.obs_fluxes[:,idx] = flux_pulls
     
-    # \\ XXX not currently in use, rejection sample line ratios instead of doing it
-    # \\ with math
-    def from_samples_load_observations ( self, espec, nsample=5000 ):
+    def load_observations ( self, espec, nsample=5000 ):
+        '''
+        Estimate line ratio PDFs by reconstructing posterior samples 
+        of line fluxes (via rejection sampling) and then estimating 
+        P(lineratio) via Gaussian KDE.
+        '''
         self.espec = espec
         self.gkde = []
         self.domain = []
-        for lrargs in self.line_ratios:
+        
+        rmarr = np.zeros(len(self.line_ratios), dtype=bool)
+        for lidx,lrargs in enumerate(self.line_ratios):
             names0 = [ f'flux_{x}' for x in lrargs[2].split(',') ]
             names1 = [ f'flux_{x}' for x in lrargs[3].split(',') ]
             
             numerator_flux = np.zeros(nsample)
             for name in names0:
+                if name not in self.espec.psample.keys():
+                    rmarr[lidx] = True                    
+                    break
                 val = espec.psample[name]
                 sample_n = sampling.rejection_sample_fromarray ( val[0], val[1], nsamp=nsample )
                 numerator_flux += sample_n
 
             denominator_flux = np.zeros(nsample)
             for name in names1:
+                if name not in self.espec.psample.keys():
+                    rmarr[lidx] = True                    
+                    break                
                 val = espec.psample[name]
                 sample_n = sampling.rejection_sample_fromarray ( val[0], val[1], nsamp=nsample )
                 denominator_flux += sample_n
 
-                
-    def load_observations ( self, espec, npts=200 ):
+            if rmarr[lidx]:
+                continue            
+            lrobs = numerator_flux / denominator_flux            
+            bw = sampling.wide_kdeBW ( lrobs.shape[0] )
+            #print(lrargs[0], lrobs.std(), bw)
+            self.gkde.append(gaussian_kde ( lrobs, bw_method=bw ))   
+            self.domain.append((lrobs.min(), lrobs.max()))
+            
+        for lidx in np.arange(len(rmarr))[rmarr][::-1]:
+            del self.line_ratios[lidx]
+            del self.rl_objects[lidx]
+        self.n_ratios = self.n_ratios - sum(rmarr)            
+
+    def load_observations_pdf ( self, espec, npts=200 ):
         '''
         Estimate probability density functions of line ratios based off of 
         approximations to 
@@ -359,7 +382,7 @@ class LineArray (object):
         elif (ne < 100.) or (ne > 1000.):
             return -np.inf
         
-        lp = np.log(models.gaussian ( np.log10(ne), (np.sqrt(2.*np.pi) * s_ne**2)**-1, m_ne, s_ne ))
+        lp = np.log(models.gaussian ( np.log10(ne), 'normalize', m_ne, s_ne ))
         # \\ fuzzily enforce the T2-T3 relation
         # \\ based off of the relation from photoionization models
         # \\ m = 0. (model prediction vs. observation)
