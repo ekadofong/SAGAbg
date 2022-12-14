@@ -1,7 +1,9 @@
 import numpy as np
+import pandas as pd
 from astropy import cosmology
 import SAGA  
 from SAGAbg.utils import calc_kcor
+
 
 cosmo = cosmology.FlatLambdaCDM(70.,0.3)
 
@@ -28,7 +30,7 @@ def build_saga_catalog ( local_dir='../local_data/', dropbox_directory = '/Users
     SAGA.utils.fill_values_by_query(clean, cuts.paper1_targeting_cut&~cuts.main_targeting_cuts, {'selection':2})
     SAGA.utils.fill_values_by_query(clean, ~cuts.main_targeting_cuts&~cuts.paper1_targeting_cut, {'selection':1})
     
-    clean = estimate_stellarmass(clean)
+    #clean = estimate_stellarmass(clean)
     clean.add_index('wordid')
     return clean
 
@@ -38,7 +40,7 @@ def build_SBAM (*args, **kwargs):
     '''
     clean = build_saga_catalog ( *args, **kwargs ).to_pandas ()
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.21)')
-    
+    #clean['logmstar'] = estimate_stellarmass ( clean )
     return subset
 
 def build_SBAMz (*args, **kwargs):
@@ -49,7 +51,22 @@ def build_SBAMz (*args, **kwargs):
     subset = clean.query('(selection>=2)&((TELNAME=="AAT")|(TELNAME=="MMT"))&(ZQUALITY>=3)&(SPEC_Z<0.1)')
     return subset
 
-def estimate_stellarmass (clean, distmod=None):
+# fit from Kado-Fong+2022
+logml = lambda gr: 1.65*gr - 0.66 
+def CM_msun ( Mg, Mr, zp_g = 5.11 ):
+    loglum_g = (Mg-zp_g)/-2.5
+    logsmass = logml(Mg-Mr) + loglum_g    
+    return logsmass
+
+def estimate_stellarmass ( clean, kcorr_file="../local_data/scratch/kcorrections.csv" ):
+    distmod = cosmo.distmod(clean['SPEC_Z'].values).value    
+    kcorr = pd.read_csv(kcorr_file,index_col=0)
+    Mr = clean['r_mag'] - distmod - kcorr['K_r']
+    Mg = clean['g_mag'] - distmod - kcorr['K_g']
+    logmstar = CM_msun ( Mg, Mr )
+    return logmstar
+
+def DEP_estimate_stellarmass (clean, distmod=None):
     kcorrect = calc_kcor.calc_kcor
     if distmod is None:
         distmod = cosmo.distmod ( clean['SPEC_Z'] ).value    
