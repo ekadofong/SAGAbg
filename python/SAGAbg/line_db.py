@@ -8,10 +8,10 @@ OII_wavelengths = {'[OII]3729':[3728.756593589433,3725.974257426484], #, '[OII]3
                    '[OII]7320':[7320.,7318.9], '[OII]7330':[7329.7,7330.7]}
                    #'[OII]7320':7320.0, '[OII]7319':7318.9, '[OII]7330':7329.7, '[OII]7331':7330.7 }
 NII_wavelengths = {'[NII]6548': 6547.952750702898,
-                   '[NII]6583': 6583.354593822465,
-                   '[NII]5755': 5754.5071992902085}
+                   '[NII]6583': 6583.354593822465}
+                   #'[NII]5755': 5754.5071992902085}
 SII_wavelengths = {'[SII]6731': 6730.713900332137, '[SII]6717': 6716.33869898957}
-FeX = {'FeX':6374.}
+FeX = {}#'FeX':6374.}
 
 line_ratios = [
                ("H", 1, 'Halpha', 'Hbeta'),
@@ -46,7 +46,8 @@ for ll in line_lists:
     line_wavelengths.update(ll)
 Nlines = len(line_wavelengths.keys())
 
-CONTINUUM_TAGS = ['Halpha','Hbeta','Hgamma','Hdelta','[OIII]5007','[SII]6717','FeX','[OII]3729','[OII]7320', '[NII]5755']
+#CONTINUUM_TAGS = ['Halpha','Hbeta','Hgamma','Hdelta','[OIII]5007','[SII]6717','FeX','[OII]3729','[OII]7320', '[NII]5755']
+CONTINUUM_TAGS = ['Halpha','Hbeta','Hgamma','Hdelta','[OIII]5007','[SII]6717','[OII]3729','[OII]7320']
 BALMER_ABSORPTION = ['Halpha','Hbeta','Hgamma','Hdelta']
 
 ## DEFAULT VALUES
