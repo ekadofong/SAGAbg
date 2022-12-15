@@ -15,30 +15,34 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_G
     1 : well-calibrated (AAT)
     2 : MMT (no break)
     '''
-    flux, wave, _, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
+    flux, wave, ivar, _ = SAGA_get_spectra.saga_get_spectrum(obj, dropbox_dir)
     if len(flux) == 0:
         return None, None
     finite_mask = np.isfinite(flux)
     flux = flux[finite_mask].astype(float)
     wave = wave[finite_mask].astype(float)
+    #ivar = ivar[finite_mask].astype(float)
 
     _, qfactors = line_fitting.flux_calibrate( wave, flux, obj, tdict )
     
     if obj['TELNAME'] == 'AAT':
         fluxcal = np.where ( wave < AAT_BREAK, flux*qfactors[0], flux*qfactors[1])*1e17
+        #ivarcal = np.where ( wave < AAT_BREAK, ivar*qfactors[0]**2, ivar*qfactors[1]**2)*1e17
     else:
         fluxcal = flux * np.nanmean(qfactors)*1e17    
-    
+        #ivarcal = ivar * (np.nanmean(qfactors)*1e17)**2
     if cut_red:
         # \\ if AAT, flux calibration is not reliable past 8000 AA
         if obj['TELNAME'] == 'AAT':
             wvmask = wave < 8000.
             wave = wave[wvmask]
             fluxcal = fluxcal[wvmask]
+            #ivarcal = ivarcal[wvmask]
         elif obj['TELNAME'] == 'MMT':
             wvmask = wave < 8200.
             wave = wave[wvmask]
-            fluxcal = fluxcal[wvmask]        
+            fluxcal = fluxcal[wvmask]   
+            #ivarcal = ivarcal[wvmask]     
         else:
             raise ValueError ('spectra from %s not flux calibrated' % obj['TELNAME'])
         
@@ -60,9 +64,9 @@ def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_G
         Av = ge.loc[obj.name, 'AV_SandF'] 
         gecorr = temdenext.gecorrection (wave, Av,)
         fluxcal *= gecorr
+        #ivarcal *= gecorr**2
         
-            
-    return wave, fluxcal, qcalibration  
+    return wave, fluxcal,  qcalibration  
 
 def check_fluxcalibration ( wave, flux, window=500, break_window=30, kernel_kwargs=None ):
     if kernel_kwargs is None:
