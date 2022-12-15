@@ -121,9 +121,10 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
             ax.axvline ( cl.emission_lines[key]*(1.+cl.z), color='grey', ls='--', zorder=0, lw=0.5)
             
             if flux[inline].size == 0:
-                mmax = np.nanmax(flux[inbloc])
+                mmax = abs(np.nanmax(flux[inbloc]))
             else:
-                mmax = np.nanmax(flux[inline])            
+                mmax = abs(np.nanmax(flux[inline]))
+            mmax = max(10, mmax)
             mmin = max(0.,ax.get_ylim()[0])
             ax.set_ylim ( mmin, 1.75*mmax )
     return fig, axarr
