@@ -398,7 +398,10 @@ class EmceeSpec ( object ):
 
     def log_prior ( self ):
         # \\ common-sense bounds
-        if (self._values_to_arr(self.model.amplitudes) < 0.).any():
+        #balmerlines = self.model.amplitudes
+        # \\ stop negative fluxes for the Balmer lines to avoid 
+        # \\ degeneracy with absorption
+        if (self._values_to_arr(self.model.amplitudes)[:4] < 0.).any():
             self.pcode = 1
             return -np.inf
         elif (self._values_to_arr(self.model.continuum_specflux) < 0.).any():
