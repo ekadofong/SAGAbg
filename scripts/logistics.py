@@ -8,6 +8,30 @@ ge_filename = '../local_data/galactic_extinction/output/extinction_formatted.csv
 ge = pd.read_csv(ge_filename, index_col=0)
 AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
 
+#def get_gamaspec ( specid, specdir='../../gama/gsb/spectra' ):
+#    '''
+#    Load [assuming flux-calibrated] AAT & SDSS spectra from the GAMA survey
+#    '''
+#    from astropy.io import fits
+#
+#    #specid = row['SPECID'].strip()
+#    if specid[0] == 'G':
+#        prefix = specid.split('_')[0]
+#    else:
+#        prefix = 'etc'
+#    specfile = f'{specdir}/{prefix}/{specid}.fit'    
+#    
+#    hdulist = fits.open(specfile)
+#
+#    hdr = hdulist[0].header
+#    pix = np.arange(1,hdulist[0].header['NAXIS1']+1) - hdulist[0].header['CRPIX1']
+#    wave = hdulist[0].header['CRVAL1'] + hdulist[0].header['CD1_1'] * pix 
+#
+#    flux = hdulist[0].data[0]
+#    uflux = hdulist[0].data[1]    
+#    
+#    return wave, flux, uflux
+
 def do_fluxcalibrate (obj, tdict, dropbox_dir, cut_red=True, alpha=0.05, apply_GEcorrection=True ):
     '''
     Calibration quality:
@@ -121,15 +145,25 @@ def download_gamaspec ( urlname, specid ):
         f.write( response.content )   
     return filename
  
-def load_gamaspec ( gamaspec ):
+def load_gamaspec ( specid, specdir='../../gama/gsb/spectra' ):
     ''' 
     Convert GAMA FITS file to a spectrum.
     Flux in 1e-17 erg/s/cm^2/AA
     '''
+    from astropy.io import fits
+
+    if specid[0] == 'G':
+        prefix = specid.split('_')[0]
+    else:
+        prefix = 'etc'
+    specfile = f'{specdir}/{prefix}/{specid}.fit'    
+    
+    gamaspec = fits.open(specfile)    
+    
     hdr = gamaspec[0].header
     if len(gamaspec) == 1:
         flux = gamaspec[0].data[0]
-        var = gamaspec[0].data[1]
+        var = gamaspec[0].data[1]**2
     else:
         flux = gamaspec['PRIMARY'].data
         var = gamaspec['VARIANCE'].data
@@ -137,9 +171,9 @@ def load_gamaspec ( gamaspec ):
     #calibrated = gamaspec[0].data[0]
     # \\ some of the GAMA spectra are log10(wv), some are linear 
     if 'log10' in hdr.comments['CRVAL1']:
-        wave = 10.**((np.arange(hdr['NAXIS1'])-hdr['CRPIX1']) * hdr['CD1_1'] + hdr['CRVAL1'])
+        wave = 10.**((1,1+np.arange(hdr['NAXIS1'])-hdr['CRPIX1']) * hdr['CD1_1'] + hdr['CRVAL1'])
     else:
-        wave = (np.arange(hdr['NAXIS1'])-hdr['CRPIX1']) * hdr['CD1_1'] + hdr['CRVAL1']
+        wave = (np.arange(1,1+hdr['NAXIS1'])-hdr['CRPIX1']) * hdr['CD1_1'] + hdr['CRVAL1']
 
     finite_mask = np.isfinite(flux)
     flux = flux[finite_mask]

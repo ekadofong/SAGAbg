@@ -17,7 +17,6 @@ from easyquery import Query
 from SAGA.database import FitsTable 
 
 
-
 #  READ AAT SPECTRA
 def read_aat_mzfile(mzfile,dir): 
     
