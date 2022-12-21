@@ -6,6 +6,10 @@ from SAGAbg import line_fitting, SAGA_get_spectra, models, temdenext
 
 ge_filename = '../local_data/galactic_extinction/output/extinction_formatted.csv'
 ge = pd.read_csv(ge_filename, index_col=0)
+
+gama_ge_filename = '../local_data/galactic_extinction/output/GSB_extinction_formatted.csv'
+gama_ge = pd.read_csv(gama_ge_filename, index_col=0)
+
 AAT_BREAK = 5790. # lambda @ blue -> red arm break in AAT
 
 #def get_gamaspec ( specid, specdir='../../gama/gsb/spectra' ):
@@ -145,7 +149,7 @@ def download_gamaspec ( urlname, specid ):
         f.write( response.content )   
     return filename
  
-def load_gamaspec ( specid, specdir='../../gama/gsb/spectra' ):
+def load_gamaspec ( specid, specdir='../../gama/gsb/spectra', apply_GEcorrection=True ):
     ''' 
     Convert GAMA FITS file to a spectrum.
     Flux in 1e-17 erg/s/cm^2/AA
@@ -179,5 +183,13 @@ def load_gamaspec ( specid, specdir='../../gama/gsb/spectra' ):
     flux = flux[finite_mask]
     wave = wave[finite_mask] 
     var = var[finite_mask]
+    
+    # \\ apply galactic extinction correction
+    if apply_GEcorrection:
+        Av = gama_ge.loc[specid, 'AV_SandF'] 
+        gecorr = temdenext.gecorrection (wave, Av,)
+        flux *= gecorr
+        var *= gecorr**2
+            
     return wave, flux, var  
 

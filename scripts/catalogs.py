@@ -146,7 +146,8 @@ def build_GSB ( gdir = '../../gama/local_data/'):
     
     # \\ join 
     adf = gama_smass.reindex(ll)[['Z','absmag_g','delabsmag_g', 'absmag_r','delabsmag_r']]
-    bdf = gama_lines.reindex(ll)[[x for x in gama_lines if ('FLUX' in x) or ('EW' in x) or (x=='SPECID')]]                       
-    df = adf.join(bdf)    
+    bdf = gama_lines.reindex(ll)[[x for x in gama_lines if ('FLUX' in x) or ('EW' in x) or (x=='SPECID')]]  
+    cdf = gama_spec.reindex(ll)[['RA','DEC']]
+    df = adf.join(bdf).join(cdf)   
     
     return df
