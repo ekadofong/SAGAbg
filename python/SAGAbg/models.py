@@ -432,11 +432,17 @@ class EmceeSpec ( object ):
         if (abs(wiggle_arr) > 0.5).any():
             return -np.inf
         
-        nii_doublet = 2.9421684623736297
-        nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
-        lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * (0.1*nii_doublet)**2)**-1, nii_doublet,  (0.1*nii_doublet)**2 ))
         # \\ physics-based bounds: computed at T=1e4 K and ne = 100 cc 
+        tripped=False
         
+        if self.model.has_line('[NII]6583'):
+            nii_doublet = 2.9421684623736297
+            nii_lr = self.model.amplitudes['[NII]6583']/self.model.amplitudes['[NII]6548']
+            lp += np.log(gaussian(nii_lr, (np.sqrt(2.*np.pi) * (0.1*nii_doublet)**2)**-1, nii_doublet,  (0.1*nii_doublet)**2 ))
+            if not np.isfinite(lp):
+                self.pcode = 14
+                tripped = True
+  
         if self.model.has_line('Halpha'):
             if self.model.has_line('Hbeta'):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hbeta'], 2.86 ))
@@ -444,22 +450,34 @@ class EmceeSpec ( object ):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hgamma'], 6.11 ))
             if self.model.has_line('Hdelta'):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['Halpha'] /self.model.amplitudes['Hdelta'], 11.06 ))
+            if not np.isfinite(lp) and not tripped:
+                self.pcode = 10
+                tripped = True
                 
         if self.model.has_line('[OIII]5007'):
             if self.model.has_line('[OIII]4959'):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4959'], 2.98 ))
             if self.model.has_line('[OIII]4363'):
                 lp += np.log(self.physratio_logprior(self.model.amplitudes['[OIII]5007'] / self.model.amplitudes['[OIII]4363'], 6.25 ))
+            if not np.isfinite(lp) and not tripped:
+                self.pcode = 11   
+                tripped = True             
         
         # \\ for the SII and OII lines, make a constraint on both sides
         if self.model.has_line('[SII]6717') and self.model.has_line('[SII]6731'):
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6717'] / self.model.amplitudes['[SII]6731'], 0.45 ))
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[SII]6731'] / self.model.amplitudes['[SII]6717'], 0.67 )) 
+            if not np.isfinite(lp) and not tripped:
+                self.pcode = 12    
+                tripped = True        
             
         if self.model.has_line('[OII]7320') and self.model.has_line('[OII]7330'):
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7320']/self.model.amplitudes['[OII]7330'], 1.23 ))
             lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7330']/self.model.amplitudes['[OII]7320'], 0.8 ))
-            
+            if not np.isfinite(lp) and not tripped:
+                self.pcode = 13
+                tripped = True
+                            
         #if self.model.has_line('[OII]3727') and self.model.has_line('[OII]3729'):
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3729']/self.model.amplitudes['[OII]3727'], 0.38 ))
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]3727']/self.model.amplitudes['[OII]3729'], 0.64 ))  
@@ -467,8 +485,8 @@ class EmceeSpec ( object ):
         #    doublet_amplitude = self.model.amplitudes['[OII]3729']
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7330']/doublet_amplitude, 0.06))
         #    lp += np.log(self.physratio_logprior(self.model.amplitudes['[OII]7320']/doublet_amplitude, 0.05))
-        
-        self.pcode = 0
+        if np.isfinite(lp):
+            self.pcode = 0
         return lp
 
     def log_likelihood ( self ):

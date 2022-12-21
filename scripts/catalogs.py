@@ -94,11 +94,12 @@ def DEP_estimate_stellarmass (clean, distmod=None):
     return clean
     
 def get_index ( catalog, indices ):
-    if hasattr(catalog, 'index'):
+    if hasattr(catalog, 'index') and not isinstance(catalog, list):
         index = catalog.index
     else:
         index = catalog
     x = np.where(np.in1d(index, indices))[0]
+    
     if len(x)==1:
         return int(x)
     else:

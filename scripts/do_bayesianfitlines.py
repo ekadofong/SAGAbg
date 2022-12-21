@@ -24,7 +24,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
     # \\ initialize walkers
     ainit = np.zeros(cl.n_emission)
     balmer_lr = dict(zip(['Hbeta','Hgamma','Hdelta'],[2.86, 6.11,11.06]))
-    oiii_lr = dict(zip(['[OIII]4959'],[2.98]))
+    oiii_lr = dict(zip(['[OIII]4959', '[OIII]4363'],[2.98, 6.25]))
     for idx,key in enumerate(cl.emission_lines.keys()):
         if key in balmer_lr.keys():
             ainit[idx] = ainit[list(cl.emission_lines.keys()).index("Halpha")] / (balmer_lr[key]*1.25)
@@ -32,8 +32,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
             ainit[idx] = ainit[list(cl.emission_lines.keys()).index("[OIII]5007")] / (oiii_lr[key]*1.25)
         else:
             inline,_=line_fitting.get_lineblocs(wave,z=cl.z, lines=cl.emission_lines[key])
-            ainit[idx] = np.nanmax(flux[inline])
-
+            ainit[idx] = np.nanmax(flux[inline])            
         
     cinit = np.zeros(cl.n_continuum)
     for idx,key in enumerate(cl.continuum_windows.keys()):
@@ -45,10 +44,19 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
     p0 = np.concatenate([ainit, winit, cinit, np.array([EW_init, stddev_em_init, stddev_abs_init])])
     p0 = p0[np.newaxis,:]
     p_init = np.random.normal(p0, p0_std*abs(p0), [nwalkers, p0.size])
-     
+    
+    # \\ add in our physical line constraints    
+    for idx,key in enumerate(cl.emission_lines.keys()):
+        if key == '[SII]6717':
+            p_init[:,idx] = p_init[:,list(cl.emission_lines.keys()).index("[SII]6731")]*np.random.uniform(.67, 2.22, p_init.shape[0])
+        elif key == '[OII]7330':            
+            p_init[:,idx] = p_init[:,list(cl.emission_lines.keys()).index("[OII]7320")]*np.random.uniform(0.8, .81, p_init.shape[0])
+        elif key == '[NII]6583':
+            p_init[:,idx] = p_init[:,list(cl.emission_lines.keys()).index("[NII]6548")]*np.random.uniform(2.9, 3., p_init.shape[0])
+            
     return p_init
 
-def do_run (  wave, flux, u_flux, z,
+def do_run (  wave, flux, u_flux=None, z=0.,
               nwalkers=100, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
               progress=True, multiprocess=True, filename=None ):   
     
@@ -74,7 +82,8 @@ def do_run (  wave, flux, u_flux, z,
             clines[key] = elines[key]    
         
     cl = models.CoordinatedLines (z=z, emission_lines=elines, absorption_lines=alines, continuum_windows=clines)    
-    #u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+    if u_flux is None:
+        u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     
     p_init = setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std, nwalkers )
     ndim = p_init.shape[1] 
@@ -188,7 +197,7 @@ def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir
         if verbose:
             print(f'{wid} already run. Skipping...')
             #print(f'{savedir}/{wid}/{wid}-bfit.npz')
-        return None, None
+        return None, (None,None,None)
     
     if not os.path.exists ( f'{savedir}/{wid}/' ):
         os.makedirs(f'{savedir}/{wid}/')
@@ -196,7 +205,7 @@ def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir
     if survey == 'SAGA':
         z = row['SPEC_Z']
         wave, flux, _ = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
-        u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+        u_flux = None #cl.construct_specflux_uncertainties ( wave, flux )
     elif survey == 'GAMA':
         z = row['Z']
         wave, flux, u_flux = logistics.load_gamaspec ( row['SPECID'].strip() )
@@ -206,7 +215,9 @@ def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir
     else:
         sampler_backend = None
     sampler, (cl, espec, p_init) = do_run ( wave, flux, u_flux, z, *args, nsteps=nsteps, filename=sampler_backend, **kwargs)
-    
+    if u_flux is None:
+        u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+        print(u_flux)
     fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
     chain_approximation = approximate_kde ( cl, fchain )
     
