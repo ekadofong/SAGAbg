@@ -48,7 +48,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
      
     return p_init
 
-def do_run (  wave, flux, z,
+def do_run (  wave, flux, u_flux, z,
               nwalkers=100, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
               progress=True, multiprocess=True, filename=None ):   
     
@@ -74,7 +74,7 @@ def do_run (  wave, flux, z,
             clines[key] = elines[key]    
         
     cl = models.CoordinatedLines (z=z, emission_lines=elines, absorption_lines=alines, continuum_windows=clines)    
-    u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+    #u_flux = cl.construct_specflux_uncertainties ( wave, flux )
     
     p_init = setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std, nwalkers )
     ndim = p_init.shape[1] 
@@ -130,50 +130,7 @@ def qaviz ( wave,flux,u_flux, fchain, cl, fsize=3, npull=100 ):
     return fig, axarr
                 
 
-def do_work ( row, *args, savedir=None, makefig=True, dropbox_dir=None, nsteps=20000, nsave=5000,
-             savefit=True, savefig=True, clobber=False, verbose=True, save_sampler=False, **kwargs ):
-    wid = row.name  
-    if savedir is None:
-        savedir = '../local_data/SBAM/bayfit'   
-    # \\ split into subdirectories
-    savedir = f'{savedir}/{wid[:2]}/'
-     
-    if dropbox_dir is None:
-        dropbox_dir = '/Users/kadofong/Dropbox/SAGA'   
-        
-               
-    if (not clobber) and os.path.exists ( f'{savedir}/{wid}/{wid}-bfit.npz'):
-        if verbose:
-            print(f'{wid} already run. Skipping...')
-        return None, None
-    
-    if not os.path.exists ( f'{savedir}/{wid}/' ):
-        os.makedirs(f'{savedir}/{wid}/')
-        
-    z = row['SPEC_Z']
-    wave, flux, _ = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
-    if save_sampler:
-        sampler_backend = f'{savedir}/{wid}/{wid}-backend.h5'
-    else:
-        sampler_backend = None
-    sampler, (cl, espec, p_init) = do_run ( wave, flux, z, *args, nsteps=nsteps, filename=sampler_backend, **kwargs)
-    u_flux = cl.construct_specflux_uncertainties ( wave, flux )
-    fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
-    chain_approximation = approximate_kde ( cl, fchain )
-    
-    if makefig:         
-        qaviz(wave, flux, u_flux, fchain, cl )
-        if savefig:
-            plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
-            plt.close ()
-    if savefit:
-        np.savez_compressed ( f'{savedir}/{wid}/{wid}-bfit.npz', **chain_approximation )
-        #np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
-        #with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
-        #    for key in cl.emission_lines.keys():
-        #        print(key, file=f)
-                
-    return sampler,  (cl, espec, p_init)
+
 
 def get_kde_domain (x, npts, covering_factor=1.5):
     xmin,xmed,xmax = np.quantile(x, [0.,.5,1.])
@@ -207,16 +164,82 @@ def approximate_kde ( cl, fchain, npts=100, covering_factor=1.5 ):
             arr_d[key] = np.array([domain,gkde(domain)]) 
     return arr_d
 
+def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir=None, nsteps=20000, nsave=5000,
+             savefit=True, savefig=True, clobber=False, verbose=True, save_sampler=False, **kwargs ):
+    wid = row.name
+    if survey == 'SAGA':
+        if savedir is None:
+            savedir = '../local_data/SBAM/bayfit'   
+        # \\ split into subdirectories
+        savedir = f'{savedir}/{wid[:2]}/' 
+        if dropbox_dir is None:
+            dropbox_dir = '/Users/kadofong/Dropbox/SAGA'   
+    elif survey=='GAMA':
+        if savedir is None:
+            savedir = '../local_data/GSB/bayfit'
+        if row['SPECID'] == 'G':
+            subdir = row['SPECID'].split('_')[0]
+        else:
+            subdir = 'etc'
+        savedir = f'{savedir}/{subdir}/'        
+            
+    
+    if (not clobber) and os.path.exists ( f'{savedir}/{wid}/{wid}-bfit.npz'):
+        if verbose:
+            print(f'{wid} already run. Skipping...')
+            #print(f'{savedir}/{wid}/{wid}-bfit.npz')
+        return None, None
+    
+    if not os.path.exists ( f'{savedir}/{wid}/' ):
+        os.makedirs(f'{savedir}/{wid}/')
+       
+    if survey == 'SAGA':
+        z = row['SPEC_Z']
+        wave, flux, _ = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
+        u_flux = cl.construct_specflux_uncertainties ( wave, flux )
+    elif survey == 'GAMA':
+        z = row['Z']
+        wave, flux, u_flux = logistics.load_gamaspec ( row['SPECID'].strip() )
         
+    if save_sampler:
+        sampler_backend = f'{savedir}/{wid}/{wid}-backend.h5'
+    else:
+        sampler_backend = None
+    sampler, (cl, espec, p_init) = do_run ( wave, flux, u_flux, z, *args, nsteps=nsteps, filename=sampler_backend, **kwargs)
+    
+    fchain = sampler.get_chain (flat=True, discard=nsteps - nsave )
+    chain_approximation = approximate_kde ( cl, fchain )
+    
+    if makefig:         
+        qaviz(wave, flux, u_flux, fchain, cl )
+        if savefig:
+            plt.savefig( f'{savedir}/{wid}/{wid}-QA.png' )
+            plt.close ()
+    if savefit:
+        np.savez_compressed ( f'{savedir}/{wid}/{wid}-bfit.npz', **chain_approximation )
+        #np.savetxt ( f'{savedir}/{wid}/{wid}-chain.txt', fchain[-nsave:])
+        #with open(f'{savedir}/{wid}/{wid}-lines.txt', 'w') as f:
+        #    for key in cl.emission_lines.keys():
+        #        print(key, file=f)
+                
+    return sampler,  (cl, espec, p_init)        
     
 def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=None, source='SBAM', wid=None, **kwargs):
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+        survey = 'SAGA'
     elif source == 'SBAMsat':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
         parent = parent.query('p_sat_corrected==1') # \\ let's do testing on the satellite sample
+        survey = 'SAGA'
+    elif source == 'GSB':
+        parent = catalogs.build_GSB ()
+        survey = 'GAMA'
+        
     
     if wid is not None:
+        if wid.isdigit ():
+            wid = int(wid)
         start = catalogs.get_index ( parent, wid )
         end = start + 1
         step = 1
@@ -240,7 +263,7 @@ def main (dropbox_dir,*args, start=0, end=-1, nfig=10, verbose=True, savedir=Non
             print(f'beginning {name}')        
             start = time.time ()
         try:
-            do_work ( row, *args, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir, **kwargs )
+            do_work ( row, *args, survey=survey, makefig=makefig, dropbox_dir=dropbox_dir, savedir=savedir, **kwargs )
         except Exception as e:
             print(f'{name} failed: {e}')
             continue
@@ -256,7 +279,7 @@ if __name__ == '__main__':
     parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
                           help='path to directory with SAGA spectra')
     parser.add_argument ( '--nfig', '-n', action='store', default=10, help='number of QA figures to generate' )
-    parser.add_argument ( '--savedir', '-s', action='store', default='../local_data/SBAM/bayfit',
+    parser.add_argument ( '--savedir', '-s', action='store', default=None, #'../local_data/SBAM/bayfit',
                          help='path to output directory')
     parser.add_argument ( '--source', action='store', default='SBAM', )
     parser.add_argument ( '--clobber', action='store_true')
