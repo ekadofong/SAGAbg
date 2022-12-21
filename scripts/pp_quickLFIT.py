@@ -10,11 +10,15 @@ class LFitter ( object ):
         self.bmax = bmax if (bmax is not None) else np.inf
         self.nwalkers = nwalkers
         
-    def log_likelihood(self, theta, x, y, yerr):
+    def log_likelihood(self, theta, x, y, yerr, weights):
         m, b = theta
         model = m * x + b
         sigma2 = yerr**2 #+ model**2 * np.exp(2)
-        return -0.5 * np.sum((y - model) ** 2 / sigma2 + np.log(sigma2))
+        if weights is None:
+            weights = np.ones_like(y)
+            
+        return -0.5 * np.sum(weights*(y - model) ** 2 / sigma2 + np.log(sigma2))
+    
 
     def log_prior(self, theta):
         m, b = theta
@@ -22,25 +26,25 @@ class LFitter ( object ):
             return 0.0
         return -np.inf
 
-    def log_probability(self, theta, x, y, yerr):
+    def log_probability(self, theta, x, y, yerr, weights=None):
         lp = self.log_prior(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + self.log_likelihood(theta, x, y, yerr)
+        return lp + self.log_likelihood(theta, x, y, yerr, weights)
     
     def rms ( self, theta, x, y ):
         ypred = theta[0]*x + theta[1] 
         return np.sum(( y - ypred )**2)
     
-    def lsquares ( self, x, y, yerr, initial):
+    def do_lsquares ( self, x, y, yerr, initial):
         nll = lambda *args: -self.log_likelihood(*args)
         soln = minimize(nll, initial, args=(x, y, yerr))
         self.lsquares = soln 
         return soln.x
 
-    def run (self, x,y,yerr, initial):
+    def run (self, x,y,yerr, initial, weights=None):
         nll = lambda *args: -self.log_likelihood(*args)    
-        soln = minimize(nll, initial, args=(x, y, yerr))
+        soln = minimize(nll, initial, args=(x, y, yerr, weights))
         self.lsquares = soln        
         #pos = soln.x + np.random.randn(32, 2)
         pos = np.random.normal ( soln.x, abs(soln.x)*.1, [self.nwalkers,2] )
@@ -48,7 +52,7 @@ class LFitter ( object ):
         nwalkers, ndim = pos.shape
 
         sampler = emcee.EnsembleSampler(
-            nwalkers, ndim, self.log_probability, args=(x, y, yerr)
+            nwalkers, ndim, self.log_probability, args=(x, y, yerr, weights)
         )
         sampler.run_mcmc(pos, 1000, progress=True)
         self.sampler = sampler
