@@ -186,7 +186,7 @@ def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir
     elif survey=='GAMA':
         if savedir is None:
             savedir = '../local_data/GSB/bayfit'
-        if row['SPECID'] == 'G':
+        if row['SPECID'][0] == 'G':
             subdir = row['SPECID'].split('_')[0]
         else:
             subdir = 'etc'
