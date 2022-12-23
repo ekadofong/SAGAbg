@@ -179,7 +179,7 @@ def load_gamaspec ( specid, specdir='../../gama/gsb/spectra', apply_GEcorrection
     else:
         wave = (np.arange(1,1+hdr['NAXIS1'])-hdr['CRPIX1']) * hdr['CD1_1'] + hdr['CRVAL1']
 
-    finite_mask = np.isfinite(flux)
+    finite_mask = np.isfinite(flux)&(var>0.)
     flux = flux[finite_mask]
     wave = wave[finite_mask] 
     var = var[finite_mask]
@@ -191,5 +191,5 @@ def load_gamaspec ( specid, specdir='../../gama/gsb/spectra', apply_GEcorrection
         flux *= gecorr
         var *= gecorr**2
             
-    return wave, flux, var  
+    return wave, flux, np.sqrt(var)
 

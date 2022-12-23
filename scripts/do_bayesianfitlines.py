@@ -58,7 +58,7 @@ def setup_run ( wave, flux, cl, stddev_em_init, stddev_abs_init, EW_init, p0_std
 
 def do_run (  wave, flux, u_flux=None, z=0.,
               nwalkers=100, nsteps=10000, p0_std = 0.1, stddev_em_init=2., stddev_abs_init=3., EW_init=-1.,
-              progress=True, multiprocess=True, filename=None ):   
+              progress=True, multiprocess=True, filename=None, dryrun=False ):   
     
     # \\ only include lines that are actually covered by the spectrum
     wvmin = wave.min()
@@ -91,7 +91,11 @@ def do_run (  wave, flux, u_flux=None, z=0.,
     # \\ run MCMC
     in_windows = u_flux>0.
     espec = models.EmceeSpec ( cl, wave[in_windows], flux[in_windows], u_flux[in_windows] )
-
+    
+    # \\ if dryrun
+    if dryrun:
+        return espec, p_init
+    
     if filename is not None:
         backend = emcee.backends.HDFBackend ( filename )
         backend.reset ( nwalkers, ndim )
