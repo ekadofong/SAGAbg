@@ -22,6 +22,7 @@ lrmod = O3.getEmissivity(tem_arr, 1e2, *O3.getTransition(4363.))
 lrmod /= O3.getEmissivity(tem_arr, 1e2, *O3.getTransition(5007.))
 interesting_limit = np.interp(2e4, tem_arr, lrmod)
 # # # #
+zkeys = {'SAGA':"SPEC_Z", 'GAMA':"Z"}
 
 def setup_run (lineratio_arrays, nwalkers, 
                Tlow=7000., Thigh=20000.,
@@ -118,19 +119,25 @@ def estimate_abundances ( la, fchain, species_d=None, npull=100 ):
     oh = np.log10(cumulative_abundance_estimates['[OII]'] + cumulative_abundance_estimates['[OIII]'])+12.
     return oh, cumulative_abundance_estimates
 
-def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, require_detections=True,
-         dropbox_directory=None,
+def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True, fit_ne=False, 
+         require_detections=True,
+         dropbox_directory=None, survey=None,
          return_dataproducts=False, detection_cutoff=0.05, verbose='vv', setup_only=False):
     '''
     Run inference
     '''
-    z=row['SPEC_Z']
-    cl = models.CoordinatedLines (z=z)
-    wave,flux,qC = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory)
+    if survey == 'SAGA':
+        z = row['SPEC_Z']
+        wave, flux, qC = logistics.do_fluxcalibrate ( row, tdict, dropbox_directory )  
+        #u_flux = None #cl.construct_specflux_uncertainties ( wave, flux )
+    elif survey == 'GAMA':
+        z = row['Z']
+        wave, flux, _ = logistics.load_gamaspec ( row['SPECID'].strip() )
+        qC = 1
     if qC == 0:
         print('Flux calibration failed; skipping')
         return 1
-    
+    cl = models.CoordinatedLines (z=z)
     #u_flux = cl.construct_specflux_uncertainties ( wave, flux )    
     espec = models.EmceeSpec ( cl, wave, flux )
     espec.load_posterior ( lr_filename )
@@ -251,17 +258,23 @@ def run ( lr_filename, row, nwalkers=12, nsteps=1000, discard=500, progress=True
 
 
 def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detections=True, 
-          clobber=False, verbose=True, barge=True, **kwargs):
+          clobber=False, verbose=True, barge=True, wid=None, **kwargs):
     '''
     Infer Te, ne, and Av of the galaxy spectrum
     based off of MCMC-inferred line ratios
     '''    
     if source == 'SBAM':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir)
+        survey = 'SAGA'
     elif source == 'SBAMz':
         parent = catalogs.build_SBAMz (dropbox_directory=dropbox_dir)
+        survey = 'SAGA'
+    elif source == 'GSB':
+        parent = catalogs.build_GSB () 
+        survey = 'GAMA'
     elif source == 'SBAMsat':
         parent = catalogs.build_SBAM (dropbox_directory=dropbox_dir).query('p_sat_corrected==1')
+        survey = 'SAGA'
     elif source == 'SBAMlm':
         import pandas as pd
         cosmo = cosmology.FlatLambdaCDM ( 70., 0.3 )
@@ -271,6 +284,7 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detecti
         Mr = sbam['r_mag'] - distmod - kcorr['K_r']
         Mg = sbam['g_mag'] - distmod - kcorr['K_g']
         logmstar = temdenext.CM_msun ( Mg, Mr )
+        survey = 'SAGA'
     elif source == 'custom':
         names = open('/Users/kadofong/Downloads/names.txt','r').read().splitlines()
         parent = catalogs.build_SBAM ( dropbox_directory=dropbox_dir )
@@ -279,7 +293,14 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detecti
     # \\ identify objects with line ratio measurements
     #run_names = [ os.path.basename(x).split('-')[0] for x in glob.glob('%s/*/*bfit.npz' % inputdir)]    
     #parent = parent.reindex(run_names)
-    if end == -1:
+    if wid is not None:
+        if wid.isdigit ():
+            wid = int(wid)
+        start = catalogs.get_index ( parent, wid )
+        end = start + 1
+        step = 1
+        print(f'{wid} -> {start}')    
+    elif end == -1:
         end = None
         
     fulltime = time.time ()
@@ -288,7 +309,16 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detecti
             print(f'beginning {name}')        
             start = time.time ()
         try:
-            lr_filename = f'{inputdir}/{name[:2]}/{name}/{name}-bfit.npz'
+            row = parent.loc[name]
+            if survey == 'SAGA':
+                lr_filename = f'{inputdir}/{name[:2]}/{name}/{name}-bfit.npz'
+            elif survey == 'GAMA':
+                if row['SPECID'][0] == 'G':
+                    subdir = row['SPECID'].split('_')[0]
+                else:
+                    subdir = 'etc'                
+                lr_filename = f'{inputdir}/{subdir}/{name}/{name}-bfit.npz'
+                #row['SPEC_Z'] = row['Z']
             if not os.path.exists ( lr_filename ):
                 print(f'{name} does not have line fit data. Skipping! ')
                 continue
@@ -298,8 +328,8 @@ def main (inputdir, dropbox_dir, start=0, end=-1, source='SBAM', require_detecti
             elif os.path.exists(lr_filename.replace('bfit.npz', 'flag')) and not clobber and require_detections:
                 print(f'{name} has already been shown to fail line detection tests')
                 continue
-            row = parent.loc[name]
-            code = run (lr_filename, row, dropbox_directory=dropbox_dir, require_detections=require_detections, **kwargs )
+            
+            code = run (lr_filename, row, dropbox_directory=dropbox_dir, require_detections=require_detections, survey=survey, **kwargs )
             if code > 0:
                 #print(f'{name} is missing meaningful line constraints')
                 continue
@@ -326,6 +356,7 @@ if __name__ == '__main__':
 
     parser.add_argument ( '--start', '-S', action='store', default=0, help='starting index')
     parser.add_argument ( '--end', '-E', action='store', default=-1, help='ending index')
+    parser.add_argument ( '--wid', action='store', default=None, )
     parser.add_argument ( '--dropbox_directory', '-d', action='store', default='/Users/kadofong/Dropbox/SAGA/',
                           help='path to directory with SAGA spectra')
     parser.add_argument ( '--delicate', action='store_true')
@@ -334,4 +365,4 @@ if __name__ == '__main__':
     args = parser.parse_args ()
     
     main ( args.input, args.dropbox_directory, start=int(args.start), end=int(args.end), source=args.source, barge=not bool(args.delicate),
-           clobber=bool(args.clobber), require_detections=not bool(args.run_all))# multiprocess=args.mpi ) 
+           clobber=bool(args.clobber), require_detections=not bool(args.run_all), wid=args.wid)# multiprocess=args.mpi ) 
