@@ -208,11 +208,14 @@ def do_work ( row, *args, survey='SAGA', savedir=None, makefig=True, dropbox_dir
        
     if survey == 'SAGA':
         z = row['SPEC_Z']
-        wave, flux, _ = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
+        wave, flux, qC = logistics.do_fluxcalibrate ( row, tdict, dropbox_dir )  
         u_flux = None #cl.construct_specflux_uncertainties ( wave, flux )
     elif survey == 'GAMA':
         z = row['Z']
         wave, flux, u_flux = logistics.load_gamaspec ( row['SPECID'].strip() )
+        # XXX is it the unreasonably low (1e-19 reported = 1e-36 erg/s/cm^2/AA) uncertainty that 
+        # are in the GAMA variance spectra?
+        u_flux = None
         
     if save_sampler:
         sampler_backend = f'{savedir}/{wid}/{wid}-backend.h5'
@@ -306,6 +309,7 @@ if __name__ == '__main__':
     parser.add_argument ( '--serial', action='store_true' )
     parser.add_argument ( '--nsteps', action='store', default=20000 )
     parser.add_argument ( '--wid', action='store', default=None)
+    parser.add_argument ( '--save_sampler', action='store_true' )
     args = parser.parse_args ()
     
     
@@ -318,4 +322,5 @@ if __name__ == '__main__':
            clobber=args.clobber, 
            wid = args.wid,
            multiprocess=not args.serial, 
-           nsteps=int(args.nsteps) ) 
+           nsteps=int(args.nsteps),
+           save_sampler=args.save_sampler) 

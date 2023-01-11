@@ -163,8 +163,8 @@ def load_gamaspec ( specid, specdir='../../gama/gsb/spectra', apply_GEcorrection
     specfile = f'{specdir}/{prefix}/{specid}.fit'    
     
     gamaspec = fits.open(specfile)    
-    
     hdr = gamaspec[0].header
+    
     if len(gamaspec) == 1:
         flux = gamaspec[0].data[0]
         var = gamaspec[0].data[1]**2
