@@ -105,7 +105,7 @@ def get_index ( catalog, indices ):
     else:
         return x
     
-def build_GSB ( gdir = '../../gama/local_data/'):
+def build_GSB ( gdir = '../../gama/local_data/', max_logmstar=10.5):
     # \\ load catalogs from FITS
     gama_lines = table.Table(fits.getdata(f'{gdir}/GaussFitComplexv05.fits' ,1 )).to_pandas ()
     gama_spec = table.Table(fits.getdata(f'{gdir}/SpecAllv27.fits' ,1 )).to_pandas ().set_index('CATAID')
@@ -142,13 +142,21 @@ def build_GSB ( gdir = '../../gama/local_data/'):
     logmstar_gama = CM_msun ( gama_smass.reindex(gama_lines.index)['absmag_g'], gama_smass.reindex(gama_lines.index)['absmag_r'] )
 
     x = gama_smass.reindex(gama_lines.index)
-    to_download = (logmstar_gama < 9.8)&(x['nQ']>2)&(x['Z']<=0.2)
+    to_download = (logmstar_gama < max_logmstar)&(x['nQ']>2)&(x['Z']<=0.2)
     ll = x.loc[to_download].index
     
     # \\ join 
     adf = gama_smass.reindex(ll)[['Z','absmag_g','delabsmag_g', 'absmag_r','delabsmag_r']]
     bdf = gama_lines.reindex(ll)[[x for x in gama_lines if ('FLUX' in x) or ('EW' in x) or (x=='SPECID')]]  
-    cdf = gama_spec.reindex(ll)[['RA','DEC']]
+    cdf = gama_spec.reindex(ll)[['RA','DEC','URL']]
     df = adf.join(bdf).join(cdf)   
     
     return df
+
+def make_GSB_download ( gsb_catalog, target=None ):
+    if target is None:
+        target = '/Users/kadofong/Downloads/GAMAdlist.txt'
+    with open(target,'w') as f:
+        for row in gsb_catalog['URL'].values:
+            print(row, file=f)    
+            
